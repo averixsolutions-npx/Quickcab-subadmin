@@ -31,8 +31,8 @@ const STATUS_OPTIONS = [
 ];
 
 const SUB_TYPE_OPTIONS = [
-  { label: "Individual", value: "INDIVIDUAL" },
-  { label: "Business",   value: "BUSINESS" },
+  { label: "Vehicle Owner", value: "VEHICLE_OWNER" },
+  { label: "Vendor",        value: "VENDOR" },
 ];
 
 export default function PartnersPage() {
@@ -120,7 +120,7 @@ export default function PartnersPage() {
         <SearchInput
           value={search}
           onChange={handleSearch}
-          placeholder="Search by name, email, phone..."
+          placeholder="Search by name, mobile..."
           className="w-full sm:w-72"
         />
         <FilterSelect
@@ -176,37 +176,33 @@ export default function PartnersPage() {
               <tbody>
                 {partners.map((partner) => (
                   <tr
-                    key={partner._id}
+                    key={partner.id}
                     className="cursor-pointer"
-                    onClick={() => router.push(`/partners/${partner._id}`)}
+                    onClick={() => router.push(`/partners/${partner.id}`)}
                   >
                     <td>
                       <div className="flex items-center gap-3">
-                        <Avatar
-                          src={partner.profilePicture}
-                          name={partner.name}
-                          size="sm"
-                        />
+                        <Avatar name={partner.name} size="sm" />
                         <div>
                           <p className="font-medium text-light-text dark:text-dark-text text-sm">
                             {partner.name}
                           </p>
                           <p className="text-xs text-light-text-3 dark:text-dark-text-3">
-                            {partner.email}
+                            {partner.partnerProfile?.email ?? partner.mobile}
                           </p>
                         </div>
                       </div>
                     </td>
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2">
-                        {partner.subType === "BUSINESS"
-                          ? partner.businessName ?? "Business"
-                          : "Individual"}
+                        {partner.partnerProfile?.subType === "VENDOR"
+                          ? partner.kycRecord?.businessName ?? "Vendor"
+                          : "Vehicle Owner"}
                       </span>
                     </td>
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2">
-                        {partner.city ?? "—"}
+                        {partner.partnerProfile?.city ?? "—"}
                       </span>
                     </td>
                     <td>
@@ -282,14 +278,14 @@ export default function PartnersPage() {
         partnerName={suspendTarget?.name ?? ""}
         onConfirm={async (payload) => {
           if (!suspendTarget) return;
-          await suspendMutation.mutateAsync({ id: suspendTarget._id, payload });
+          await suspendMutation.mutateAsync({ id: suspendTarget.id, payload });
         }}
       />
 
       <ConfirmModal
         open={!!unsuspendTarget}
         onClose={() => setUnsuspendTarget(null)}
-        onConfirm={() => unsuspendTarget && unsuspendMutation.mutate(unsuspendTarget._id)}
+        onConfirm={() => unsuspendTarget && unsuspendMutation.mutate(unsuspendTarget.id)}
         title="Unsuspend Partner"
         description={`Remove suspension from ${unsuspendTarget?.name ?? "this partner"}?`}
         confirmLabel="Unsuspend"
@@ -303,14 +299,14 @@ export default function PartnersPage() {
         partnerName={blockTarget?.name ?? ""}
         onConfirm={async (reason) => {
           if (!blockTarget) return;
-          await blockMutation.mutateAsync({ id: blockTarget._id, reason });
+          await blockMutation.mutateAsync({ id: blockTarget.id, reason });
         }}
       />
 
       <ConfirmModal
         open={!!unblockTarget}
         onClose={() => setUnblockTarget(null)}
-        onConfirm={() => unblockTarget && unblockMutation.mutate(unblockTarget._id)}
+        onConfirm={() => unblockTarget && unblockMutation.mutate(unblockTarget.id)}
         title="Unblock Partner"
         description={`Unblock ${unblockTarget?.name ?? "this partner"}? They will regain platform access.`}
         confirmLabel="Unblock"
@@ -324,7 +320,7 @@ export default function PartnersPage() {
         partnerName={deleteTarget?.name ?? ""}
         onConfirm={async () => {
           if (!deleteTarget) return;
-          await deleteMutation.mutateAsync(deleteTarget._id);
+          await deleteMutation.mutateAsync(deleteTarget.id);
         }}
       />
     </div>

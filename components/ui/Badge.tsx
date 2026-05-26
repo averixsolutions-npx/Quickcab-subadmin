@@ -54,14 +54,10 @@ export function KycStatusBadge({ status }: { status: KycStatus }) {
 
 export function BookingStatusBadge({ status }: { status: BookingStatus }) {
   const map: Record<BookingStatus, { label: string; variant: BadgeVariant }> = {
-    PENDING:         { label: "Pending",          variant: "warning" },
-    ACCEPTED:        { label: "Accepted",         variant: "info" },
-    DRIVER_ASSIGNED: { label: "Driver Assigned",  variant: "info" },
-    PICKUP_REACHED:  { label: "Pickup Reached",   variant: "purple" },
-    TRIP_STARTED:    { label: "In Progress",      variant: "purple" },
-    COMPLETED:       { label: "Completed",        variant: "success" },
-    CANCELLED:       { label: "Cancelled",        variant: "danger" },
-    NO_DRIVER:       { label: "No Driver",        variant: "neutral" },
+    OPEN:      { label: "Open",      variant: "info" },
+    BOOKED:    { label: "Booked",    variant: "purple" },
+    EXPIRED:   { label: "Expired",   variant: "neutral" },
+    CANCELLED: { label: "Cancelled", variant: "danger" },
   };
   const { label, variant } = map[status] ?? { label: status, variant: "neutral" };
   return <Badge variant={variant}>{label}</Badge>;

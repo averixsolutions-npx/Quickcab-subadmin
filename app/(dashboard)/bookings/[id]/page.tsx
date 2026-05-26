@@ -4,7 +4,7 @@ import { useState } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, MapPin, User, Car, CreditCard, Clock } from "lucide-react";
+import { ArrowLeft, MapPin, User, Car, Clock } from "lucide-react";
 import { bookingsApi } from "@/lib/api/bookings";
 import { BookingStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -53,7 +53,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const canCancel = ["PENDING", "ACCEPTED", "DRIVER_ASSIGNED", "PICKUP_REACHED"].includes(booking.status);
+  const canCancel = ["OPEN", "BOOKED"].includes(booking.status);
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -69,7 +69,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <p className="text-xs text-light-text-3 dark:text-dark-text-3 mb-1">Booking ID</p>
-            <p className="font-mono font-semibold text-light-text dark:text-dark-text">{booking.bookingId}</p>
+            <p className="font-mono font-semibold text-light-text dark:text-dark-text">{booking.id.slice(-8).toUpperCase()}</p>
             <div className="mt-2">
               <BookingStatusBadge status={booking.status} />
             </div>
@@ -94,48 +94,40 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           <div className="space-y-3">
             <div>
               <p className="text-xs text-light-text-3 dark:text-dark-text-3 mb-0.5">Pickup</p>
-              <p className="text-sm text-light-text dark:text-dark-text">{booking.pickupLocation.address}</p>
+              <p className="text-sm text-light-text dark:text-dark-text">{booking.pickupCity}</p>
             </div>
-            <div className="border-l-2 border-dashed border-light-border dark:border-dark-border ml-1 pl-3 py-1">
-              {booking.distance != null && (
-                <p className="text-xs text-light-text-3 dark:text-dark-text-3">
-                  {booking.distance} km · {booking.duration} min
-                </p>
-              )}
-            </div>
+            <div className="border-l-2 border-dashed border-light-border dark:border-dark-border ml-1 pl-3 py-1" />
             <div>
               <p className="text-xs text-light-text-3 dark:text-dark-text-3 mb-0.5">Drop</p>
-              <p className="text-sm text-light-text dark:text-dark-text">{booking.dropLocation.address}</p>
+              <p className="text-sm text-light-text dark:text-dark-text">{booking.dropCity}</p>
             </div>
           </div>
         </div>
 
-        {/* Payment */}
+        {/* Fare */}
         <div className="card space-y-3">
           <h3 className="text-sm font-semibold text-light-text dark:text-dark-text flex items-center gap-2">
-            <CreditCard size={14} className="text-brand-purple" />
-            Payment
+            <Car size={14} className="text-brand-purple" />
+            Fare &amp; Vehicle
           </h3>
-          {booking.fare != null && (
-            <p className="text-2xl font-bold text-light-text dark:text-dark-text">
-              ₹{booking.fare}
-            </p>
-          )}
-          <DetailRow label="Method"  value={booking.paymentMethod} />
-          <DetailRow label="Status"  value={booking.paymentStatus} />
-          {booking.vehicleType && <DetailRow label="Vehicle" value={booking.vehicleType} />}
+          <p className="text-2xl font-bold text-light-text dark:text-dark-text">
+            ₹{booking.postedAmount}
+          </p>
+          <DetailRow label="Vehicle" value={booking.vehicleType} />
+          <DetailRow label="Date"    value={booking.date} />
+          <DetailRow label="Time"    value={booking.time} />
+          {booking.notes && <DetailRow label="Notes" value={booking.notes} />}
         </div>
 
         {/* People */}
-        {(booking.partner || booking.customer || booking.driver) && (
+        {(booking.postedBy || booking.acceptedBy) && (
           <div className="card space-y-3">
             <h3 className="text-sm font-semibold text-light-text dark:text-dark-text flex items-center gap-2">
               <User size={14} className="text-brand-purple" />
               People
             </h3>
-            {booking.partner && <DetailRow label="Partner"  value={booking.partner.name} />}
-            {booking.customer && <DetailRow label="Customer" value={booking.customer.name} />}
-            {booking.driver && <DetailRow label="Driver"   value={booking.driver.name} />}
+            {booking.postedBy && <DetailRow label="Posted By"   value={booking.postedBy.name} />}
+            {booking.acceptedBy && <DetailRow label="Accepted By" value={booking.acceptedBy.name} />}
           </div>
         )}
 
@@ -145,10 +137,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
             <Clock size={14} className="text-brand-purple" />
             Timeline
           </h3>
-          <DetailRow label="Created"    value={formatDateTime(booking.createdAt)} />
-          {booking.scheduledAt && <DetailRow label="Scheduled"  value={formatDateTime(booking.scheduledAt)} />}
-          {booking.startedAt && <DetailRow label="Started"    value={formatDateTime(booking.startedAt)} />}
-          {booking.completedAt && <DetailRow label="Completed"  value={formatDateTime(booking.completedAt)} />}
+          <DetailRow label="Created"   value={formatDateTime(booking.createdAt)} />
+          {booking.cancelledAt && <DetailRow label="Cancelled" value={formatDateTime(booking.cancelledAt)} />}
           {booking.cancelReason && (
             <div>
               <p className="text-xs text-light-text-3 dark:text-dark-text-3 mb-0.5">Cancel Reason</p>
@@ -161,7 +151,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       <CancelBookingModal
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        bookingId={booking.bookingId}
+        bookingId={booking.id.slice(-8).toUpperCase()}
         onConfirm={async (reason) => { await cancelMutation.mutateAsync(reason); }}
       />
     </div>

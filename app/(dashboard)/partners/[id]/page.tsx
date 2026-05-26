@@ -4,7 +4,7 @@ import { useState } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Phone, Mail, MapPin, Car, Building2 } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Car, Building2 } from "lucide-react";
 import { partnersApi } from "@/lib/api/partners";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -19,16 +19,17 @@ import { DeleteUserModal } from "@/components/partners/DeleteUserModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { KycDocViewer } from "@/components/partners/KycDocViewer";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
+import type { Booking } from "@/types/booking";
 import toast from "react-hot-toast";
 
 type Tab = "overview" | "kyc" | "bookings";
 
 const KYC_DOCS = [
-  { key: "aadhaarFront",  label: "Aadhaar Front" },
-  { key: "aadhaarBack",   label: "Aadhaar Back" },
-  { key: "drivingLicence",label: "Driving Licence" },
-  { key: "selfie",        label: "Selfie" },
-  { key: "businessDoc",   label: "Business Document" },
+  { key: "aadhaarFront",   label: "Aadhaar Front",     urlKey: "aadhaarFrontUrl",   statusKey: "aadhaarFrontStatus" },
+  { key: "aadhaarBack",    label: "Aadhaar Back",      urlKey: "aadhaarBackUrl",    statusKey: "aadhaarBackStatus" },
+  { key: "drivingLicence", label: "Driving Licence",   urlKey: "drivingLicenceUrl", statusKey: "drivingLicenceStatus" },
+  { key: "selfie",         label: "Selfie",            urlKey: "selfieUrl",         statusKey: "selfieStatus" },
+  { key: "businessDoc",    label: "Business Document", urlKey: "businessDocUrl",    statusKey: "businessDocStatus" },
 ] as const;
 
 export default function PartnerDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -127,7 +128,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
 
   const isSuspended = partner.status === "SUSPENDED";
   const isBlocked = partner.status === "BLOCKED";
-  const kycPending = partner.kyc?.status === "PENDING";
+  const kycPending = partner.kycRecord?.status === "PENDING";
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -142,14 +143,14 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
         </button>
 
         <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-          <Avatar src={partner.profilePicture} name={partner.name} size="lg" />
+          <Avatar name={partner.name} size="lg" />
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-xl font-semibold text-light-text dark:text-dark-text">{partner.name}</h2>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <UserStatusBadge status={partner.status} />
-                  {partner.kyc && <KycStatusBadge status={partner.kyc.status} />}
+                  {partner.kycRecord && <KycStatusBadge status={partner.kycRecord.status} />}
                 </div>
               </div>
               {/* Action buttons */}
@@ -180,34 +181,28 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
 
             {/* Info row */}
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 text-sm text-light-text-2 dark:text-dark-text-2">
-              {partner.email && (
-                <span className="flex items-center gap-1.5">
-                  <Mail size={13} className="shrink-0" />
-                  {partner.email}
-                </span>
-              )}
-              {partner.phone && (
+              {partner.mobile && (
                 <span className="flex items-center gap-1.5">
                   <Phone size={13} className="shrink-0" />
-                  {partner.phone}
+                  {partner.mobile}
                 </span>
               )}
-              {partner.city && (
+              {partner.partnerProfile?.city && (
                 <span className="flex items-center gap-1.5">
                   <MapPin size={13} className="shrink-0" />
-                  {partner.city}
+                  {partner.partnerProfile.city}
                 </span>
               )}
-              {partner.vehicleNumber && (
+              {partner.kycRecord?.vehicleNumber && (
                 <span className="flex items-center gap-1.5">
                   <Car size={13} className="shrink-0" />
-                  {partner.vehicleNumber}
+                  {partner.kycRecord.vehicleNumber}
                 </span>
               )}
-              {partner.businessName && (
+              {partner.kycRecord?.businessName && (
                 <span className="flex items-center gap-1.5">
                   <Building2 size={13} className="shrink-0" />
-                  {partner.businessName}
+                  {partner.kycRecord.businessName}
                 </span>
               )}
             </div>
@@ -238,34 +233,17 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="card space-y-3">
             <h3 className="text-sm font-semibold text-light-text dark:text-dark-text">Account Details</h3>
-            <DetailRow label="Partner ID"    value={partner._id} mono />
-            <DetailRow label="Type"          value={partner.subType} />
-            <DetailRow label="Joined"        value={formatDate(partner.createdAt)} />
-            <DetailRow label="Last Updated"  value={formatDate(partner.updatedAt)} />
-            {partner.rating != null && <DetailRow label="Rating" value={`${partner.rating} ★`} />}
-            {partner.totalBookings != null && <DetailRow label="Total Bookings" value={String(partner.totalBookings)} />}
+            <DetailRow label="Partner ID"   value={partner.id} mono />
+            <DetailRow label="Type"         value={partner.partnerProfile?.subType ?? "—"} />
+            <DetailRow label="Joined"       value={formatDate(partner.createdAt)} />
+            <DetailRow label="Wallet"       value={`₹${partner.walletBalance}`} />
+            {partner.partnerProfile?.rating != null && (
+              <DetailRow label="Rating" value={`${partner.partnerProfile.rating} ★`} />
+            )}
+            {partner.referralCode && (
+              <DetailRow label="Referral Code" value={partner.referralCode} mono />
+            )}
           </div>
-
-          {(isSuspended || isBlocked) && (
-            <div className="card space-y-3">
-              <h3 className="text-sm font-semibold text-light-text dark:text-dark-text">
-                {isSuspended ? "Suspension Details" : "Block Details"}
-              </h3>
-              {isSuspended && partner.suspension && (
-                <>
-                  <DetailRow label="Reason"    value={partner.suspension.reason} />
-                  <DetailRow label="Permanent" value={partner.suspension.isPermanent ? "Yes" : "No"} />
-                  {partner.suspension.endDate && (
-                    <DetailRow label="End Date" value={formatDate(partner.suspension.endDate)} />
-                  )}
-                  <DetailRow label="Since" value={formatDate(partner.suspension.startDate)} />
-                </>
-              )}
-              {isBlocked && partner.blockReason && (
-                <DetailRow label="Reason" value={partner.blockReason} />
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -288,13 +266,16 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {KYC_DOCS.map(({ key, label }) => (
+            {KYC_DOCS.map((doc) => (
               <KycDocViewer
-                key={key}
+                key={doc.key}
                 userId={id}
-                fieldKey={key}
-                label={label}
-                doc={partner.kyc?.[key as keyof typeof partner.kyc] as Parameters<typeof KycDocViewer>[0]["doc"]}
+                fieldKey={doc.key}
+                label={doc.label}
+                doc={{
+                  status: ((partner.kycRecord as Record<string, unknown> | null)?.[doc.statusKey] as "PENDING" | "APPROVED" | "REJECTED") ?? "NOT_SUBMITTED",
+                  url: ((partner.kycRecord as Record<string, unknown> | null)?.[doc.urlKey] as string | null | undefined) ?? undefined,
+                }}
                 onRefresh={refetch}
               />
             ))}
@@ -324,25 +305,25 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
                     </tr>
                   </thead>
                   <tbody>
-                    {bookingsData.items.map((b: { _id: string; bookingId: string; pickupLocation: { address: string }; dropLocation: { address: string }; status: import("@/types/booking").BookingStatus; createdAt: string }) => (
+                    {bookingsData.items.map((b: Booking) => (
                       <tr
-                        key={b._id}
+                        key={b.id}
                         className="cursor-pointer"
-                        onClick={() => router.push(`/bookings/${b._id}`)}
+                        onClick={() => router.push(`/bookings/${b.id}`)}
                       >
                         <td>
                           <span className="font-mono text-xs text-light-text dark:text-dark-text">
-                            {b.bookingId}
+                            {b.id.slice(-8).toUpperCase()}
                           </span>
                         </td>
                         <td>
                           <span className="text-sm text-light-text-2 dark:text-dark-text-2 line-clamp-1 max-w-[150px]">
-                            {b.pickupLocation.address}
+                            {b.pickupCity}
                           </span>
                         </td>
                         <td>
                           <span className="text-sm text-light-text-2 dark:text-dark-text-2 line-clamp-1 max-w-[150px]">
-                            {b.dropLocation.address}
+                            {b.dropCity}
                           </span>
                         </td>
                         <td><BookingStatusBadge status={b.status} /></td>

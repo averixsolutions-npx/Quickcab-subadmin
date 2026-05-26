@@ -18,14 +18,10 @@ import type { Booking } from "@/types/booking";
 import toast from "react-hot-toast";
 
 const STATUS_OPTIONS = [
-  { label: "Pending",         value: "PENDING" },
-  { label: "Accepted",        value: "ACCEPTED" },
-  { label: "Driver Assigned", value: "DRIVER_ASSIGNED" },
-  { label: "Pickup Reached",  value: "PICKUP_REACHED" },
-  { label: "In Progress",     value: "TRIP_STARTED" },
-  { label: "Completed",       value: "COMPLETED" },
-  { label: "Cancelled",       value: "CANCELLED" },
-  { label: "No Driver",       value: "NO_DRIVER" },
+  { label: "Open",      value: "OPEN" },
+  { label: "Booked",    value: "BOOKED" },
+  { label: "Expired",   value: "EXPIRED" },
+  { label: "Cancelled", value: "CANCELLED" },
 ];
 
 export default function BookingsPage() {
@@ -66,8 +62,7 @@ export default function BookingsPage() {
   const bookings: Booking[] = data?.items ?? [];
   const pagination = data?.pagination;
 
-  const canCancel = (status: string) =>
-    ["PENDING", "ACCEPTED", "DRIVER_ASSIGNED", "PICKUP_REACHED"].includes(status);
+  const canCancel = (s: string) => ["OPEN", "BOOKED"].includes(s);
 
   return (
     <div>
@@ -105,7 +100,7 @@ export default function BookingsPage() {
               <thead>
                 <tr>
                   <th>Booking ID</th>
-                  <th>Partner</th>
+                  <th>Posted By</th>
                   <th>Pickup</th>
                   <th>Status</th>
                   <th>Created</th>
@@ -115,23 +110,23 @@ export default function BookingsPage() {
               <tbody>
                 {bookings.map((booking) => (
                   <tr
-                    key={booking._id}
+                    key={booking.id}
                     className="cursor-pointer"
-                    onClick={() => router.push(`/bookings/${booking._id}`)}
+                    onClick={() => router.push(`/bookings/${booking.id}`)}
                   >
                     <td>
                       <span className="font-mono text-xs text-light-text dark:text-dark-text">
-                        {booking.bookingId}
+                        {booking.id.slice(-8).toUpperCase()}
                       </span>
                     </td>
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2">
-                        {booking.partner?.name ?? "—"}
+                        {booking.postedBy?.name ?? "—"}
                       </span>
                     </td>
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2 line-clamp-1 max-w-[180px] block">
-                        {booking.pickupLocation.address}
+                        {booking.pickupCity}
                       </span>
                     </td>
                     <td>
@@ -166,10 +161,10 @@ export default function BookingsPage() {
       <CancelBookingModal
         open={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
-        bookingId={cancelTarget?.bookingId ?? ""}
+        bookingId={cancelTarget?.id.slice(-8).toUpperCase() ?? ""}
         onConfirm={async (reason) => {
           if (!cancelTarget) return;
-          await cancelMutation.mutateAsync({ id: cancelTarget._id, reason });
+          await cancelMutation.mutateAsync({ id: cancelTarget.id, reason });
         }}
       />
     </div>

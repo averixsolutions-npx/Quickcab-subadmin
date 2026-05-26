@@ -1,55 +1,75 @@
-import type { UserStatus, KycStatus } from "./api";
+export type UserStatus = "ONBOARDING" | "PROFILE_COMPLETE" | "KYC_PENDING" | "ACTIVE" | "SUSPENDED" | "BLOCKED";
+export type KycStatus = "NOT_SUBMITTED" | "IN_PROGRESS" | "PENDING" | "APPROVED" | "REJECTED";
+export type PartnerSubType = "VEHICLE_OWNER" | "VENDOR";
 
-export type { UserStatus, KycStatus };
-
-export type PartnerSubType = "INDIVIDUAL" | "BUSINESS";
-
+// Shape used by KycDocViewer prop
 export interface KycDocument {
   status: "PENDING" | "APPROVED" | "REJECTED" | "NOT_SUBMITTED";
   url?: string;
   rejectReason?: string;
-  uploadedAt?: string;
 }
 
-export interface KycData {
+export interface PartnerProfile {
+  subType: PartnerSubType;
+  areasOfInterest: string[];
+  rating: number;
+  totalRatings: number;
+  city: string | null;
+  email: string | null;
+}
+
+export interface KycRecord {
+  id: string;
   status: KycStatus;
-  submittedAt?: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-  adminNote?: string;
-  aadhaarFront?: KycDocument;
-  aadhaarBack?: KycDocument;
-  drivingLicence?: KycDocument;
-  selfie?: KycDocument;
-  businessDoc?: KycDocument;
-}
-
-export interface SuspensionData {
-  reason: string;
-  isPermanent: boolean;
-  startDate: string;
-  endDate?: string;
-  suspendedBy?: string;
+  fullName: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  email: string | null;
+  aadhaarNumber: string | null;
+  city: string | null;
+  area: string | null;
+  aadhaarFrontUrl: string | null;
+  aadhaarBackUrl: string | null;
+  drivingLicenceUrl: string | null;
+  selfieUrl: string | null;
+  businessDocUrl: string | null;
+  vehicleName: string | null;
+  vehicleType: string | null;
+  vehicleNumber: string | null;
+  businessName: string | null;
+  aadhaarFrontStatus: "PENDING" | "APPROVED" | "REJECTED";
+  aadhaarBackStatus: "PENDING" | "APPROVED" | "REJECTED";
+  drivingLicenceStatus: "PENDING" | "APPROVED" | "REJECTED";
+  selfieStatus: "PENDING" | "APPROVED" | "REJECTED";
+  businessDocStatus: "PENDING" | "APPROVED" | "REJECTED";
+  aadhaarRejectReason: string | null;
+  drivingLicenceRejectReason: string | null;
+  selfieRejectReason: string | null;
+  businessDocRejectReason: string | null;
+  adminNote: string | null;
+  reviewedAt: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  resubmittedAt: string | null;
+  resubmittedDocuments?: string[];
 }
 
 export interface Partner {
-  _id: string;
+  id: string;
   name: string;
-  email: string;
-  phone?: string;
-  city?: string;
+  mobile: string;
   status: UserStatus;
-  subType: PartnerSubType;
-  businessName?: string;
-  profilePicture?: string;
-  kyc?: KycData;
-  suspension?: SuspensionData;
-  blockReason?: string;
+  walletBalance: number;
+  referralCode: string;
+  lastLoginAt: string | null;
   createdAt: string;
-  updatedAt: string;
-  vehicleNumber?: string;
-  vehicleType?: string;
-  totalBookings?: number;
-  totalEarnings?: number;
-  rating?: number;
+  partnerProfile: PartnerProfile | null;
+  kycRecord: KycRecord | null;
+  subscription: {
+    id: string;
+    status: "ACTIVE" | "EXPIRED" | "CANCELLED";
+    endDate: string;
+    plan: { name: string };
+  } | null;
 }
