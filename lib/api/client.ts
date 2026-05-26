@@ -44,15 +44,38 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
     const isAuthEndpoint = originalRequest.url?.includes("/subadmin/auth/");
 
-    if (error.response?.status === 401 && !isAuthEndpoint) {
-      const data = error.response?.data as { code?: string } | undefined;
-      if (data?.code === "ACCESS_DISABLED") {
-        tokenStorage.clear();
-        if (typeof window !== "undefined") window.location.href = "/disabled";
-        return Promise.reject(error);
+    if (!isAuthEndpoint) {
+      const data = error.response?.data as {
+        code?: string;
+        reason?: string;
+      } | undefined;
+
+      if (error.response?.status === 403) {
+        if (data?.code === "ACCESS_DISABLED") {
+          tokenStorage.clear();
+          if (typeof window !== "undefined") window.location.href = "/disabled";
+          return Promise.reject(error);
+        }
+        if (data?.code === "SUBADMIN_SUSPENDED" || data?.code === "SUBADMIN_BLOCKED") {
+          // Store the reason so the /restricted page can display it
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "qc_subadmin_restriction",
+              JSON.stringify({
+                code: data.code,
+                reason: data.reason ?? "No reason provided",
+              })
+            );
+            window.location.href = "/restricted";
+          }
+          return Promise.reject(error);
+        }
       }
-      tokenStorage.clear();
-      if (typeof window !== "undefined") window.location.href = "/login";
+
+      if (error.response?.status === 401) {
+        tokenStorage.clear();
+        if (typeof window !== "undefined") window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
