@@ -7,6 +7,7 @@ export interface KycDocument {
   status: "PENDING" | "APPROVED" | "REJECTED" | "NOT_SUBMITTED";
   url?: string;
   rejectReason?: string;
+  uploadedAt?: string;
 }
 
 export interface PartnerProfile {
