@@ -113,12 +113,12 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
 
         {/* Image area */}
         {url ? (
-          <div className="group relative overflow-hidden cursor-pointer" onClick={openLightbox}>
+          <div className="group relative overflow-hidden cursor-pointer h-36" onClick={openLightbox}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={url}
               alt={label}
-              className="w-full h-36 object-cover transition-transform duration-300 group-hover:scale-105"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               onError={(e) => { console.error(`[KYC] Image failed to load for ${label}:`, url); }}
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 pointer-events-none" />
