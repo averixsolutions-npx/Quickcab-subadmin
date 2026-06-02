@@ -48,9 +48,9 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
     const ext = file.name.split(".").pop() ?? "jpg";
     setUploading(true);
     try {
-      const { uploadUrl, fileKey } = await partnersApi.getKycUploadUrl(fieldKey, ext);
+      const { uploadUrl, publicUrl } = await partnersApi.getKycUploadUrl(fieldKey, ext);
       await axios.put(uploadUrl, file, { headers: { "Content-Type": file.type } });
-      await partnersApi.saveKycDocImage(userId, fieldKey, fileKey);
+      await partnersApi.saveKycDocImage(userId, fieldKey, publicUrl);
       toast.success(`${label} uploaded successfully`);
       onRefresh();
     } catch {

@@ -61,7 +61,7 @@ export const partnersApi = {
       selfie: "kyc-selfie",
       businessDoc: "kyc-business-doc",
     };
-    const response = await apiClient.post("/upload/presigned-url-admin", {
+    const response = await apiClient.post("/upload/presigned-url-subadmin", {
       category: categoryMap[fieldKey],
       fileExtension,
     });
