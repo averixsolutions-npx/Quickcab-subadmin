@@ -3,7 +3,8 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { FileCheck } from "lucide-react";
+import { FileCheck, Clock, CheckCircle, XCircle } from "lucide-react";
+import { StatCard } from "@/components/ui/StatCard";
 import { partnersApi } from "@/lib/api/partners";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Pagination } from "@/components/ui/Pagination";
@@ -48,10 +49,45 @@ export default function KycPage() {
   const partners: Partner[] = data?.items ?? [];
   const pagination = data?.pagination;
 
+  const pendingCount = partners.filter((p) => p.kycRecord?.status === "PENDING").length;
+  const approvedCount = partners.filter((p) => p.kycRecord?.status === "APPROVED").length;
+  const rejectedCount = partners.filter((p) => p.kycRecord?.status === "REJECTED").length;
+
   return (
-    <div>
+    <div className="space-y-6">
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Queue"
+          value={(pagination?.total ?? 0).toLocaleString("en-IN")}
+          icon={FileCheck}
+        />
+        <StatCard
+          label="Pending (on page)"
+          value={pendingCount}
+          icon={Clock}
+          iconColor={pendingCount > 5 ? "text-brand-orange" : "text-brand-purple"}
+          iconBg={pendingCount > 5 ? "bg-orange-50 dark:bg-orange-950/30" : "bg-brand-purple-muted dark:bg-brand-purple-muted-dark"}
+        />
+        <StatCard
+          label="Approved (on page)"
+          value={approvedCount}
+          icon={CheckCircle}
+          iconColor="text-brand-green"
+          iconBg="bg-green-50 dark:bg-green-950/30"
+        />
+        <StatCard
+          label="Rejected (on page)"
+          value={rejectedCount}
+          icon={XCircle}
+          iconColor="text-brand-red"
+          iconBg="bg-red-50 dark:bg-red-950/30"
+        />
+      </div>
+
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3">
         <SearchInput
           value={search}
           onChange={handleSearch}

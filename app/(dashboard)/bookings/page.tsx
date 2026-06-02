@@ -3,7 +3,8 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Clock, CheckCircle, XCircle } from "lucide-react";
+import { StatCard } from "@/components/ui/StatCard";
 import { bookingsApi } from "@/lib/api/bookings";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { FilterSelect } from "@/components/ui/FilterSelect";
@@ -64,10 +65,48 @@ export default function BookingsPage() {
 
   const canCancel = (s: string) => ["OPEN", "BOOKED"].includes(s);
 
+  const bookingStats = {
+    total: pagination?.total ?? 0,
+    open: bookings.filter((b) => b.status === "OPEN").length,
+    booked: bookings.filter((b) => b.status === "BOOKED").length,
+    cancelled: bookings.filter((b) => b.status === "CANCELLED").length,
+  };
+
   return (
-    <div>
+    <div className="space-y-6">
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Bookings"
+          value={(pagination?.total ?? 0).toLocaleString("en-IN")}
+          icon={BookOpen}
+        />
+        <StatCard
+          label="Open (on page)"
+          value={bookingStats.open}
+          icon={Clock}
+          iconColor="text-brand-orange"
+          iconBg="bg-orange-50 dark:bg-orange-950/30"
+        />
+        <StatCard
+          label="Booked (on page)"
+          value={bookingStats.booked}
+          icon={CheckCircle}
+          iconColor="text-brand-green"
+          iconBg="bg-green-50 dark:bg-green-950/30"
+        />
+        <StatCard
+          label="Cancelled (on page)"
+          value={bookingStats.cancelled}
+          icon={XCircle}
+          iconColor="text-brand-red"
+          iconBg="bg-red-50 dark:bg-red-950/30"
+        />
+      </div>
+
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3">
         <SearchInput
           value={search}
           onChange={handleSearch}

@@ -3,7 +3,8 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { Users, UserCheck, UserX, Clock } from "lucide-react";
+import { StatCard } from "@/components/ui/StatCard";
 import { partnersApi } from "@/lib/api/partners";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { FilterSelect } from "@/components/ui/FilterSelect";
@@ -113,10 +114,50 @@ export default function PartnersPage() {
   const partners: Partner[] = data?.items ?? [];
   const pagination = data?.pagination;
 
+  const statsData = {
+    total: pagination?.total ?? 0,
+    active: partners.filter((p) => p.status === "ACTIVE").length,
+    pendingKyc: partners.filter((p) =>
+      ["KYC_PENDING", "KYC_IN_PROGRESS", "PROFILE_COMPLETE"].includes(p.status)
+    ).length,
+    suspended: partners.filter((p) => p.status === "SUSPENDED").length,
+  };
+
   return (
-    <div>
+    <div className="space-y-6">
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Total Partners"
+          value={(pagination?.total ?? 0).toLocaleString("en-IN")}
+          icon={Users}
+        />
+        <StatCard
+          label="Active (on page)"
+          value={statsData.active}
+          icon={UserCheck}
+          iconColor="text-brand-green"
+          iconBg="bg-green-50 dark:bg-green-950/30"
+        />
+        <StatCard
+          label="KYC Pending (on page)"
+          value={statsData.pendingKyc}
+          icon={Clock}
+          iconColor={statsData.pendingKyc > 5 ? "text-brand-orange" : "text-brand-purple"}
+          iconBg={statsData.pendingKyc > 5 ? "bg-orange-50 dark:bg-orange-950/30" : "bg-brand-purple-muted dark:bg-brand-purple-muted-dark"}
+        />
+        <StatCard
+          label="Suspended (on page)"
+          value={statsData.suspended}
+          icon={UserX}
+          iconColor="text-brand-red"
+          iconBg="bg-red-50 dark:bg-red-950/30"
+        />
+      </div>
+
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3">
         <SearchInput
           value={search}
           onChange={handleSearch}
@@ -325,4 +366,5 @@ export default function PartnersPage() {
       />
     </div>
   );
+
 }
