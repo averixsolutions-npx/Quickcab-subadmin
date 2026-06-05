@@ -1,183 +1,207 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  X, ZoomIn, ZoomOut, RotateCw, Download, FileX,
-  CheckCircle, XCircle, AlertCircle, Upload, Loader2,
+  X, ZoomIn, ZoomOut, RotateCw, Download, FileX, CheckCircle, XCircle,
+  AlertCircle, RefreshCw, Upload, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { partnersApi } from "@/lib/api/partners";
-import type { KycDocument } from "@/types/partner";
-import toast from "react-hot-toast";
-import axios from "axios";
 
-interface KycDocViewerProps {
-  userId: string;
-  fieldKey: string;
+// ─── Types ────────────────────────────────────────────────
+export interface DocItem {
   label: string;
-  doc?: KycDocument;
-  onRefresh: () => void;
+  fieldKey: string;        // e.g. "aadhaarFront", "drivingLicence"
+  url: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  rejectReason: string | null;
+  isResubmitted?: boolean; // true if this doc is in resubmittedDocuments[]
 }
 
-export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDocViewerProps) {
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [reviewing, setReviewing] = useState<"APPROVED" | "REJECTED" | null>(null);
-  const [showRejectInput, setShowRejectInput] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+interface KycDocViewerProps {
+  docs: DocItem[];
+  userId?: string;
+  onApproveDoc?: (fieldKey: string) => void;
+  onRejectDoc?: (fieldKey: string, reason: string) => void;
+  onUploadDoc?: (fieldKey: string, file: File) => void;
+  uploadingField?: string | null;
+  loading?: boolean;
+}
 
-  const openLightbox = () => {
-    setLightboxOpen(true);
-    setZoom(1);
-    setRotation(0);
-  };
-
-  const closeLightbox = () => {
-    setLightboxOpen(false);
-    setZoom(1);
-    setRotation(0);
-  };
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const ext = file.name.split(".").pop() ?? "jpg";
-    setUploading(true);
-    try {
-      const { uploadUrl, publicUrl } = await partnersApi.getKycUploadUrl(fieldKey, ext);
-      await axios.put(uploadUrl, file, { headers: { "Content-Type": file.type } });
-      await partnersApi.saveKycDocImage(userId, fieldKey, publicUrl);
-      toast.success(`${label} uploaded successfully`);
-      onRefresh();
-    } catch {
-      toast.error("Upload failed. Please try again.");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
-  const handleApprove = async () => {
-    setReviewing("APPROVED");
-    try {
-      await partnersApi.reviewDocument(userId, fieldKey, "APPROVED");
-      toast.success("Document approved");
-      onRefresh();
-    } catch {
-      toast.error("Action failed. Please try again.");
-    } finally {
-      setReviewing(null);
-    }
-  };
-
-  const handleRejectConfirm = async () => {
-    if (!rejectReason.trim()) return;
-    setReviewing("REJECTED");
-    try {
-      await partnersApi.reviewDocument(userId, fieldKey, "REJECTED", rejectReason.trim());
-      toast.success("Document rejected");
-      setShowRejectInput(false);
-      setRejectReason("");
-      onRefresh();
-    } catch {
-      toast.error("Action failed. Please try again.");
-    } finally {
-      setReviewing(null);
-    }
-  };
-
-  const status = doc?.status ?? "NOT_SUBMITTED";
-  const url = doc?.url;
+// ─── Single Document Card ─────────────────────────────────
+function DocCard({
+  doc,
+  onView,
+  onApprove,
+  onReject,
+  onUpload,
+  isUploading,
+  loading,
+}: {
+  doc: DocItem;
+  onView: (url: string, label: string) => void;
+  onApprove?: (fieldKey: string) => void;
+  onReject?: (fieldKey: string) => void;
+  onUpload?: (fieldKey: string, file: File) => void;
+  isUploading?: boolean;
+  loading?: boolean;
+}) {
+  console.log(`[KYC_DOC] Rendering doc: ${doc.label}`);
+  console.log(`[KYC_DOC] URL received from API: ${doc.url}`);
+  console.log(`[KYC_DOC] Status: ${doc.status}`);
 
   const statusBorder = {
-    PENDING:       "border-light-border dark:border-dark-border",
-    APPROVED:      "border-green-400 dark:border-brand-green",
-    REJECTED:      "border-brand-red",
-    NOT_SUBMITTED: "border-light-border dark:border-dark-border",
-  }[status];
+    PENDING: "border-light-border dark:border-dark-border",
+    APPROVED: "border-green-400 dark:border-brand-green",
+    REJECTED: "border-brand-red",
+  }[doc.status];
 
   const statusBg = {
-    PENDING:       "",
-    APPROVED:      "bg-green-50/40 dark:bg-brand-green-muted/20",
-    REJECTED:      "bg-red-50/40 dark:bg-brand-red-muted/20",
-    NOT_SUBMITTED: "",
-  }[status];
+    PENDING: "",
+    APPROVED: "bg-green-50/40 dark:bg-brand-green-muted/20",
+    REJECTED: "bg-red-50/40 dark:bg-brand-red-muted/20",
+  }[doc.status];
+
+  if (!doc.url) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center gap-2 h-40 rounded-xl",
+          "border-2 border-dashed",
+          statusBorder,
+          "bg-light-surface-2 dark:bg-dark-surface"
+        )}
+      >
+        <FileX size={22} className="text-light-text-3 dark:text-dark-text-3" />
+        <div className="text-center">
+          <p className="text-[12px] font-medium text-light-text-2 dark:text-dark-text-2">
+            {doc.label}
+          </p>
+          <p className="text-[11px] text-light-text-3 dark:text-dark-text-3">
+            Not uploaded
+          </p>
+        </div>
+        {onUpload && (
+          <label className={cn(
+            "mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer",
+            "text-[11px] font-semibold text-brand-purple",
+            "bg-brand-purple-muted dark:bg-brand-purple-muted-dark",
+            "hover:bg-brand-purple/20 transition-colors",
+            isUploading && "opacity-50 pointer-events-none"
+          )}>
+            {isUploading ? (
+              <><Loader2 size={11} className="animate-spin" /> Uploading...</>
+            ) : (
+              <><Upload size={11} /> Add Image</>
+            )}
+            <input
+              type="file"
+              accept="image/jpeg,image/jpg,image/png"
+              className="sr-only"
+              disabled={isUploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onUpload(doc.fieldKey, file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div className={cn("rounded-xl overflow-hidden border-2", statusBorder, statusBg, "bg-white dark:bg-dark-surface transition-colors")}>
+    <div
+      className={cn(
+        "rounded-xl overflow-hidden border-2",
+        statusBorder, statusBg,
+        "bg-white dark:bg-dark-surface transition-colors"
+      )}
+    >
+      {/* Resubmitted badge */}
+      {doc.isResubmitted && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-purple text-white text-[11px] font-semibold">
+          <RefreshCw size={11} />
+          Resubmitted — review again
+        </div>
+      )}
 
-        {/* Image area */}
-        {url ? (
-          <div className="group relative overflow-hidden cursor-pointer h-28" onClick={openLightbox}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={label}
-              className="w-full h-full object-contain bg-light-surface-2 dark:bg-dark-surface-2 transition-transform duration-300 group-hover:scale-105"
-              onError={(e) => { console.error(`[KYC] Image failed to load for ${label}:`, url); }}
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 pointer-events-none" />
-          </div>
-        ) : (
-          <div className={cn(
-            "flex flex-col items-center justify-center gap-2 h-28",
-            "border-b border-dashed border-light-border dark:border-dark-border",
-            "bg-light-surface-2 dark:bg-dark-surface"
-          )}>
-            <FileX size={22} className="text-light-text-3 dark:text-dark-text-3" />
-            <p className="text-[11px] text-light-text-3 dark:text-dark-text-3">Not uploaded</p>
-          </div>
-        )}
+      {/* Image area — click anywhere to open viewer */}
+      <div
+        className="group relative overflow-hidden cursor-pointer"
+        onClick={() => onView(doc.url!, doc.label)}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={doc.url}
+          alt={doc.label}
+          className="w-full h-36 object-cover transition-transform duration-300 group-hover:scale-105"
+          onLoad={() => {
+            console.log(`[KYC_DOC] ✅ Image loaded successfully — ${doc.label}`);
+            console.log(`[KYC_DOC] URL: ${doc.url}`);
+          }}
+          onError={(e) => {
+            console.error(`[KYC_DOC] ❌ Image failed to load — ${doc.label}`);
+            console.error(`[KYC_DOC] URL that failed: ${doc.url}`);
+            console.error(`[KYC_DOC] Error event:`, e);
+          }}
+        />
+        {/* Subtle dark tint on hover — no buttons */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 pointer-events-none" />
+      </div>
 
-        {/* Label + status row */}
-        <div className="px-3 py-2 border-t border-light-border dark:border-dark-border">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[12px] font-semibold text-light-text dark:text-dark-text">{label}</p>
-            {status === "APPROVED" && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-brand-green">
-                <CheckCircle size={11} /> APPROVED
-              </span>
-            )}
-            {status === "REJECTED" && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-brand-red">
-                <XCircle size={11} /> REJECTED
-              </span>
-            )}
-            {status === "PENDING" && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-light-text-3 dark:text-dark-text-3">
-                <AlertCircle size={11} /> PENDING
-              </span>
-            )}
-          </div>
-          {doc?.rejectReason && status === "REJECTED" && (
-            <p className="text-[11px] text-brand-red mt-1 leading-relaxed">
-              Reason: {doc.rejectReason}
-            </p>
+      {/* Label + status */}
+      <div className="px-3 py-2 border-t border-light-border dark:border-dark-border">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[12px] font-semibold text-light-text dark:text-dark-text">
+            {doc.label}
+          </p>
+          {doc.status === "APPROVED" && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-brand-green">
+              <CheckCircle size={11} /> APPROVED
+            </span>
+          )}
+          {doc.status === "REJECTED" && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-brand-red">
+              <XCircle size={11} /> REJECTED
+            </span>
+          )}
+          {doc.status === "PENDING" && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-light-text-3 dark:text-dark-text-3">
+              <AlertCircle size={11} /> PENDING
+            </span>
           )}
         </div>
 
-        {/* Approve / Reject buttons */}
-        {status === "PENDING" && (
-          <div className="px-3 pb-2 flex gap-2">
+        {/* Reject reason display */}
+        {doc.rejectReason && doc.status === "REJECTED" && (
+          <p className="text-[11px] text-brand-red mt-1 leading-relaxed">
+            Reason: {doc.rejectReason}
+          </p>
+        )}
+      </div>
+
+      {/* Per-document action buttons */}
+      {(onApprove || onReject) && doc.status !== "APPROVED" && (
+        <div className="px-3 pb-2 flex gap-2">
+          {onApprove && (
             <button
-              onClick={handleApprove}
-              disabled={reviewing === "APPROVED"}
+              onClick={() => onApprove(doc.fieldKey)}
+              disabled={loading}
               className={cn(
                 "flex-1 py-1.5 rounded-lg text-[11px] font-semibold",
                 "text-white bg-brand-purple hover:bg-brand-purple-dark",
                 "transition-colors disabled:opacity-50"
               )}
             >
-              {reviewing === "APPROVED" ? "..." : "✓ Approve"}
+              ✓ Approve
             </button>
+          )}
+          {doc.status !== "REJECTED" && onReject && (
             <button
-              onClick={() => setShowRejectInput(true)}
-              disabled={!!reviewing}
+              onClick={() => onReject(doc.fieldKey)}
+              disabled={loading}
               className={cn(
                 "flex-1 py-1.5 rounded-lg text-[11px] font-semibold",
                 "text-brand-red bg-brand-red-muted border border-brand-red/20",
@@ -186,39 +210,110 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
             >
               ✕ Reject
             </button>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* Upload button */}
+      {/* Admin upload/replace image button — always shown when onUpload is provided */}
+      {onUpload && (
         <div className="px-3 pb-3">
           <label className={cn(
             "flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg cursor-pointer",
-            "text-[11px] font-semibold border border-light-border dark:border-dark-border",
+            "text-[11px] font-semibold",
+            "border border-light-border dark:border-dark-border",
             "text-light-text-2 dark:text-dark-text-2",
             "hover:bg-light-surface-2 dark:hover:bg-dark-surface hover:border-brand-purple hover:text-brand-purple",
             "transition-colors",
-            uploading && "opacity-50 pointer-events-none"
+            isUploading && "opacity-50 pointer-events-none"
           )}>
-            {uploading ? (
+            {isUploading ? (
               <><Loader2 size={11} className="animate-spin" /> Uploading...</>
             ) : (
-              <><Upload size={11} /> {url ? "Replace Image" : "Upload Image"}</>
+              <><Upload size={11} /> {doc.url ? "Replace Image" : "Upload Image"}</>
             )}
             <input
-              ref={fileRef}
               type="file"
               accept="image/jpeg,image/jpg,image/png"
               className="sr-only"
-              disabled={uploading}
-              onChange={handleUpload}
+              disabled={isUploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onUpload(doc.fieldKey, file);
+                e.target.value = "";
+              }}
             />
           </label>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main KycDocViewer ────────────────────────────────────
+export function KycDocViewer({
+  docs,
+  userId,
+  onApproveDoc,
+  onRejectDoc,
+  onUploadDoc,
+  uploadingField,
+  loading,
+}: KycDocViewerProps) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxLabel, setLightboxLabel] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const openLightbox = (url: string, label: string) => {
+    setLightboxUrl(url);
+    setLightboxLabel(label);
+    setZoom(1);
+    setRotation(0);
+  };
+
+  const closeLightbox = () => {
+    setLightboxUrl(null);
+    setZoom(1);
+    setRotation(0);
+  };
+
+  const handleRejectConfirm = () => {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    onRejectDoc?.(rejectTarget, rejectReason.trim());
+    setRejectTarget(null);
+    setRejectReason("");
+  };
+
+  return (
+    <>
+      {/* Doc Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {docs.map((doc) => (
+          <DocCard
+            key={doc.fieldKey}
+            doc={doc}
+            onView={openLightbox}
+            onApprove={onApproveDoc ? (key) => onApproveDoc(key) : undefined}
+            onReject={
+              onRejectDoc
+                ? (key) => {
+                    setRejectTarget(key);
+                    setRejectReason("");
+                  }
+                : undefined
+            }
+            onUpload={onUploadDoc}
+            isUploading={uploadingField === doc.fieldKey}
+            loading={loading}
+          />
+        ))}
       </div>
 
-      {/* Lightbox */}
+      {/* Lightbox — zoom · rotate · mouse-wheel zoom */}
       <AnimatePresence>
-        {lightboxOpen && url && (
+        {lightboxUrl && (
           <div className="fixed inset-0 z-50 flex flex-col items-center justify-center select-none">
             {/* Backdrop */}
             <motion.div
@@ -238,9 +333,12 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               className="relative z-10 flex items-center gap-1.5 mb-4 px-3 py-2 rounded-2xl bg-white/10 backdrop-blur-sm"
             >
               <span className="text-white/80 text-[13px] font-medium pr-2 max-w-[160px] truncate">
-                {label}
+                {lightboxLabel}
               </span>
+
               <div className="w-px h-5 bg-white/20 mx-1" />
+
+              {/* Zoom out */}
               <button
                 onClick={() => setZoom(p => Math.max(0.25, parseFloat((p - 0.25).toFixed(2))))}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
@@ -248,9 +346,13 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               >
                 <ZoomOut size={15} />
               </button>
+
+              {/* Zoom % */}
               <span className="text-white/60 text-[12px] font-mono w-11 text-center">
                 {Math.round(zoom * 100)}%
               </span>
+
+              {/* Zoom in */}
               <button
                 onClick={() => setZoom(p => Math.min(5, parseFloat((p + 0.25).toFixed(2))))}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
@@ -258,7 +360,10 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               >
                 <ZoomIn size={15} />
               </button>
+
               <div className="w-px h-5 bg-white/20 mx-1" />
+
+              {/* Rotate 90° clockwise */}
               <button
                 onClick={() => setRotation(p => (p + 90) % 360)}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
@@ -266,15 +371,20 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               >
                 <RotateCw size={15} />
               </button>
+
+              {/* Reset */}
               <button
                 onClick={() => { setZoom(1); setRotation(0); }}
                 className="px-3 h-8 rounded-lg bg-white/10 hover:bg-white/25 text-white/60 hover:text-white text-[11px] font-medium transition-colors"
               >
                 Reset
               </button>
+
               <div className="w-px h-5 bg-white/20 mx-1" />
+
+              {/* Download */}
               <a
-                href={url}
+                href={lightboxUrl}
                 download
                 target="_blank"
                 rel="noreferrer"
@@ -283,6 +393,8 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               >
                 <Download size={15} />
               </a>
+
+              {/* Close */}
               <button
                 onClick={closeLightbox}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-red-500/50 flex items-center justify-center text-white transition-colors"
@@ -292,7 +404,7 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               </button>
             </motion.div>
 
-            {/* Image viewport */}
+            {/* Image viewport — overflow-auto so zoomed content is scrollable */}
             <motion.div
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -318,8 +430,8 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={url}
-                  alt={label}
+                  src={lightboxUrl}
+                  alt={lightboxLabel}
                   draggable={false}
                   className="select-none"
                   style={{
@@ -335,6 +447,7 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               </div>
             </motion.div>
 
+            {/* Hint */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -347,13 +460,15 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
         )}
       </AnimatePresence>
 
-      {/* Reject reason modal */}
+      {/* Per-document Reject Reason Modal */}
       <AnimatePresence>
-        {showRejectInput && (
+        {rejectTarget && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowRejectInput(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setRejectTarget(null)}
               className="absolute inset-0 bg-black/60"
             />
             <motion.div
@@ -367,7 +482,7 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
                 Reject Document
               </h3>
               <p className="text-[13px] text-light-text-2 dark:text-dark-text-2 mb-4">
-                Type the reason — the partner will see this message and must fix this document before resubmitting.
+                Type the reason — the partner will see this exact message and must fix this document before resubmitting.
               </p>
               <textarea
                 rows={3}
@@ -379,14 +494,14 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
               />
               <div className="flex gap-3 justify-end">
                 <button
-                  onClick={() => { setShowRejectInput(false); setRejectReason(""); }}
+                  onClick={() => setRejectTarget(null)}
                   className="px-4 py-2 rounded-xl text-[13px] font-medium text-light-text-2 dark:text-dark-text-2 hover:bg-light-surface-2 dark:hover:bg-dark-surface transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleRejectConfirm}
-                  disabled={!rejectReason.trim() || !!reviewing}
+                  disabled={!rejectReason.trim() || loading}
                   className="px-4 py-2 rounded-xl text-[13px] font-semibold text-white bg-brand-red hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
                   Reject Document
@@ -397,5 +512,69 @@ export function KycDocViewer({ userId, fieldKey, label, doc, onRefresh }: KycDoc
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+// ─── KYC Approve / Reject action bar (full KYC decision) ──
+export function KycActionBar({
+  kycStatus,
+  onApprove,
+  onReject,
+  loading,
+}: {
+  kycStatus: string;
+  onApprove: () => void;
+  onReject: () => void;
+  loading?: boolean;
+}) {
+  if (kycStatus === "APPROVED") {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-50 dark:bg-brand-green-muted border border-green-200 dark:border-brand-green/20">
+        <CheckCircle size={16} className="text-green-600 dark:text-brand-green" />
+        <p className="text-[13px] font-medium text-green-700 dark:text-brand-green">
+          KYC Approved
+        </p>
+      </div>
+    );
+  }
+
+  if (kycStatus === "REJECTED") {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-brand-red-muted border border-brand-red/20">
+        <XCircle size={16} className="text-brand-red" />
+        <p className="text-[13px] font-medium text-brand-red">
+          KYC Rejected — awaiting resubmission
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        onClick={onReject}
+        disabled={loading}
+        className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium",
+          "text-brand-red bg-brand-red-muted border border-brand-red/20",
+          "hover:bg-red-100 dark:hover:bg-red-950 transition-colors disabled:opacity-50"
+        )}
+      >
+        <XCircle size={14} />
+        Reject KYC (all pending docs)
+      </button>
+      <button
+        onClick={onApprove}
+        disabled={loading}
+        className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium",
+          "text-white bg-brand-purple hover:bg-brand-purple-dark",
+          "shadow-purple-glow transition-colors disabled:opacity-50"
+        )}
+      >
+        <CheckCircle size={14} />
+        Approve KYC
+      </button>
+    </div>
   );
 }

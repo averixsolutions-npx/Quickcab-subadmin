@@ -4,7 +4,7 @@ import { useState } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Phone, MapPin, Car, Building2 } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Car, Building2, RefreshCw } from "lucide-react";
 import { partnersApi } from "@/lib/api/partners";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -17,20 +17,13 @@ import { SuspendModal } from "@/components/partners/SuspendModal";
 import { BlockModal } from "@/components/partners/BlockModal";
 import { DeleteUserModal } from "@/components/partners/DeleteUserModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { KycDocViewer } from "@/components/partners/KycDocViewer";
+import { KycDocViewer, KycActionBar } from "@/components/partners/KycDocViewer";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import type { Booking } from "@/types/booking";
 import toast from "react-hot-toast";
 
 type Tab = "overview" | "kyc" | "bookings";
 
-const KYC_DOCS = [
-  { key: "aadhaarFront",   label: "Aadhaar Front",     urlKey: "aadhaarFrontUrl",   statusKey: "aadhaarFrontStatus" },
-  { key: "aadhaarBack",    label: "Aadhaar Back",      urlKey: "aadhaarBackUrl",    statusKey: "aadhaarBackStatus" },
-  { key: "drivingLicence", label: "Driving Licence",   urlKey: "drivingLicenceUrl", statusKey: "drivingLicenceStatus" },
-  { key: "selfie",         label: "Selfie",            urlKey: "selfieUrl",         statusKey: "selfieStatus" },
-  { key: "businessDoc",    label: "Business Document", urlKey: "businessDocUrl",    statusKey: "businessDocStatus" },
-] as const;
 
 export default function PartnerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -38,6 +31,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
   const [bookingsPage, setBookingsPage] = useState(1);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
 
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [unsuspendOpen, setUnsuspendOpen] = useState(false);
@@ -98,15 +92,37 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
   });
 
   const approveKycMutation = useMutation({
-    mutationFn: () => partnersApi.approveKyc(id),
-    onSuccess: () => { toast.success("KYC approved"); setApproveKycOpen(false); invalidate(); },
+    mutationFn: (note?: string) => partnersApi.approveKyc(id, note),
+    onSuccess: () => { toast.success("KYC approved"); setApproveKycOpen(false); invalidate(); refetch(); },
     onError: () => toast.error("Failed to approve KYC"),
   });
 
   const rejectKycMutation = useMutation({
-    mutationFn: () => partnersApi.rejectKyc(id, { reason: "Documents do not meet requirements" }),
-    onSuccess: () => { toast.success("KYC rejected"); setRejectKycOpen(false); invalidate(); },
-    onError: () => toast.error("Failed to reject KYC"),
+    mutationFn: (payload: Record<string, unknown>) => partnersApi.rejectKyc(id, payload),
+    onSuccess: () => { toast.success("KYC rejected — partner notified"); setRejectKycOpen(false); invalidate(); refetch(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? "Failed to reject KYC"),
+  });
+
+  const reviewDocMutation = useMutation({
+    mutationFn: (vars: { document: string; status: "APPROVED" | "REJECTED"; rejectReason?: string }) =>
+      partnersApi.reviewDocument(id, vars.document, vars.status, vars.rejectReason),
+    onSuccess: () => { invalidate(); refetch(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? "Failed to review document"),
+  });
+
+  const uploadKycDocMutation = useMutation({
+    mutationFn: async (vars: { fieldKey: string; file: File }) => {
+      const ext = vars.file.name.split(".").pop() || "jpg";
+      const { uploadUrl, fileKey } = await partnersApi.getKycUploadUrl(vars.fieldKey, ext);
+      await fetch(uploadUrl, {
+        method: "PUT",
+        body: vars.file,
+        headers: { "Content-Type": vars.file.type },
+      });
+      await partnersApi.saveKycDocImage(id, vars.fieldKey, fileKey);
+    },
+    onSuccess: () => { toast.success("Document uploaded"); invalidate(); refetch(); },
+    onError: () => toast.error("Upload failed. Please try again."),
   });
 
   if (isLoading) {
@@ -128,7 +144,107 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
 
   const isSuspended = partner.status === "SUSPENDED";
   const isBlocked = partner.status === "BLOCKED";
-  const kycPending = partner.kycRecord?.status === "PENDING";
+  const kycRecord = partner.kycRecord;
+  const resubmittedSet = new Set<string>(
+    (kycRecord as any)?.resubmittedDocuments ?? []
+  );
+
+  const kycDocs = kycRecord
+    ? [
+        {
+          label: "Aadhaar Front",
+          fieldKey: "aadhaarFront",
+          url: (kycRecord as any).aadhaarFrontUrl ?? null,
+          status: (kycRecord as any).aadhaarFrontStatus ?? "PENDING",
+          rejectReason: (kycRecord as any).aadhaarRejectReason ?? null,
+          isResubmitted: resubmittedSet.has("aadhaarFront"),
+        },
+        {
+          label: "Aadhaar Back",
+          fieldKey: "aadhaarBack",
+          url: (kycRecord as any).aadhaarBackUrl ?? null,
+          status: (kycRecord as any).aadhaarBackStatus ?? "PENDING",
+          rejectReason: (kycRecord as any).aadhaarRejectReason ?? null,
+          isResubmitted: resubmittedSet.has("aadhaarBack"),
+        },
+        {
+          label: "Driving Licence",
+          fieldKey: "drivingLicence",
+          url: (kycRecord as any).drivingLicenceUrl ?? null,
+          status: (kycRecord as any).drivingLicenceStatus ?? "PENDING",
+          rejectReason: (kycRecord as any).drivingLicenceRejectReason ?? null,
+          isResubmitted: resubmittedSet.has("drivingLicence"),
+        },
+        {
+          label: "Selfie",
+          fieldKey: "selfie",
+          url: (kycRecord as any).selfieUrl ?? null,
+          status: (kycRecord as any).selfieStatus ?? "PENDING",
+          rejectReason: (kycRecord as any).selfieRejectReason ?? null,
+          isResubmitted: resubmittedSet.has("selfie"),
+        },
+      ]
+    : [];
+
+  const handleApproveKyc = async () => {
+    await approveKycMutation.mutateAsync("All documents verified");
+  };
+
+  const handleRejectKyc = async () => {
+    const payload = {
+      adminNote: "Documents do not meet requirements",
+      aadhaarFrontStatus: "REJECTED",
+      aadhaarFrontRejectReason: "Documents do not meet requirements",
+      aadhaarBackStatus: "REJECTED",
+      aadhaarBackRejectReason: "Documents do not meet requirements",
+      selfieStatus: "REJECTED",
+      selfieRejectReason: "Documents do not meet requirements",
+      ...((kycRecord as any)?.drivingLicenceUrl
+        ? {
+            drivingLicenceStatus: "REJECTED",
+            drivingLicenceRejectReason: "Documents do not meet requirements",
+          }
+        : {}),
+    };
+    await rejectKycMutation.mutateAsync(payload);
+  };
+
+  const handleApproveDoc = async (fieldKey: string) => {
+    await reviewDocMutation.mutateAsync({ document: fieldKey, status: "APPROVED" });
+
+    const fresh = await refetch();
+    const freshKyc = (fresh.data as any)?.kycRecord;
+    if (!freshKyc) return;
+
+    const allApproved =
+      freshKyc.aadhaarFrontStatus === "APPROVED" &&
+      freshKyc.aadhaarBackStatus === "APPROVED" &&
+      freshKyc.selfieStatus === "APPROVED" &&
+      (!freshKyc.drivingLicenceUrl || freshKyc.drivingLicenceStatus === "APPROVED");
+
+    const anyRejected =
+      freshKyc.aadhaarFrontStatus === "REJECTED" ||
+      freshKyc.aadhaarBackStatus === "REJECTED" ||
+      freshKyc.selfieStatus === "REJECTED" ||
+      (!!freshKyc.drivingLicenceUrl && freshKyc.drivingLicenceStatus === "REJECTED");
+
+    if (allApproved && !anyRejected) {
+      await approveKycMutation.mutateAsync("All documents verified");
+    }
+  };
+
+  const handleRejectDoc = async (fieldKey: string, reason: string) => {
+    await reviewDocMutation.mutateAsync({ document: fieldKey, status: "REJECTED", rejectReason: reason });
+  };
+
+  const handleUploadDoc = async (fieldKey: string, file: File) => {
+    setUploadingField(fieldKey);
+    try {
+      await uploadKycDocMutation.mutateAsync({ fieldKey, file });
+    } finally {
+      setUploadingField(null);
+    }
+  };
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -249,37 +365,58 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
 
       {tab === "kyc" && (
         <div className="space-y-4">
-          {kycPending && (
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-brand-orange-muted border border-brand-orange/20">
-              <p className="text-sm text-brand-orange flex-1">
-                KYC submission is pending review. Review all documents before approving or rejecting.
-              </p>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setApproveKycOpen(true)}>
-                  Approve All
-                </Button>
-                <Button variant="danger" size="sm" onClick={() => setRejectKycOpen(true)}>
-                  Reject
-                </Button>
+          {kycRecord ? (
+            <>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-[13px] text-light-text-2 dark:text-dark-text-2">
+                    Review all uploaded documents below
+                  </p>
+                </div>
+                <KycActionBar
+                  kycStatus={(kycRecord as any).status}
+                  onApprove={handleApproveKyc}
+                  onReject={handleRejectKyc}
+                  loading={approveKycMutation.isPending || rejectKycMutation.isPending}
+                />
               </div>
+
+              {/* Resubmission notice */}
+              {((kycRecord as any).resubmittedDocuments?.length ?? 0) > 0 && (
+                <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-brand-purple-muted dark:bg-brand-purple-muted-dark border border-brand-purple/20">
+                  <RefreshCw size={16} className="text-brand-purple mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[13px] font-semibold text-brand-purple">
+                      Partner resubmitted documents
+                    </p>
+                    <p className="text-[12px] text-light-text-2 dark:text-dark-text-2 mt-0.5">
+                      Re-uploaded: {(kycRecord as any).resubmittedDocuments!.join(", ")}
+                      {(kycRecord as any).resubmittedAt ? ` · ${formatDateTime((kycRecord as any).resubmittedAt)}` : ""}
+                    </p>
+                    <p className="text-[12px] text-light-text-3 dark:text-dark-text-3 mt-1">
+                      Previously approved documents do not need re-review
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <KycDocViewer
+                docs={kycDocs}
+                userId={id}
+                onApproveDoc={handleApproveDoc}
+                onRejectDoc={handleRejectDoc}
+                onUploadDoc={handleUploadDoc}
+                uploadingField={uploadingField}
+                loading={reviewDocMutation.isPending}
+              />
+            </>
+          ) : (
+            <div className="card text-center py-12">
+              <p className="text-light-text-2 dark:text-dark-text-2">
+                No KYC documents submitted yet
+              </p>
             </div>
           )}
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {KYC_DOCS.map((doc) => (
-              <KycDocViewer
-                key={doc.key}
-                userId={id}
-                fieldKey={doc.key}
-                label={doc.label}
-                doc={{
-                  status: ((partner.kycRecord as Record<string, unknown> | null)?.[doc.statusKey] as "PENDING" | "APPROVED" | "REJECTED") ?? "NOT_SUBMITTED",
-                  url: ((partner.kycRecord as Record<string, unknown> | null)?.[doc.urlKey] as string | null | undefined) ?? undefined,
-                }}
-                onRefresh={refetch}
-              />
-            ))}
-          </div>
         </div>
       )}
 
@@ -383,26 +520,6 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
         onClose={() => setDeleteOpen(false)}
         partnerName={partner.name}
         onConfirm={async () => { await deleteMutation.mutateAsync(); }}
-      />
-      <ConfirmModal
-        open={approveKycOpen}
-        onClose={() => setApproveKycOpen(false)}
-        onConfirm={() => approveKycMutation.mutate()}
-        title="Approve KYC"
-        description={`Approve the KYC submission for ${partner.name}?`}
-        confirmLabel="Approve"
-        variant="primary"
-        loading={approveKycMutation.isPending}
-      />
-      <ConfirmModal
-        open={rejectKycOpen}
-        onClose={() => setRejectKycOpen(false)}
-        onConfirm={() => rejectKycMutation.mutate()}
-        title="Reject KYC"
-        description={`Reject the KYC submission for ${partner.name}?`}
-        confirmLabel="Reject"
-        variant="danger"
-        loading={rejectKycMutation.isPending}
       />
     </div>
   );

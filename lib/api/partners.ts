@@ -59,10 +59,11 @@ export const partnersApi = {
       aadhaarBack: "kyc-aadhaar-back",
       drivingLicence: "kyc-driving-licence",
       selfie: "kyc-selfie",
-      businessDoc: "kyc-business-doc",
     };
+    const category = categoryMap[fieldKey];
+    if (!category) throw new Error(`Unknown fieldKey: ${fieldKey}`);
     const response = await apiClient.post("/upload/presigned-url-subadmin", {
-      category: categoryMap[fieldKey],
+      category,
       fileExtension,
     });
     return response.data.data as { uploadUrl: string; fileKey: string; publicUrl: string };
