@@ -340,7 +340,7 @@ export function KycDocViewer({
 
               {/* Zoom out */}
               <button
-                onClick={() => setZoom(p => Math.max(0.25, parseFloat((p - 0.25).toFixed(2))))}
+                onClick={() => setZoom(p => Math.max(0.25, parseFloat((p - 0.10).toFixed(2))))}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
                 title="Zoom out"
               >
@@ -354,7 +354,7 @@ export function KycDocViewer({
 
               {/* Zoom in */}
               <button
-                onClick={() => setZoom(p => Math.min(5, parseFloat((p + 0.25).toFixed(2))))}
+                onClick={() => setZoom(p => Math.min(5, parseFloat((p + 0.10).toFixed(2))))}
                 className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
                 title="Zoom in"
               >
@@ -404,13 +404,13 @@ export function KycDocViewer({
               </button>
             </motion.div>
 
-            {/* Image viewport — overflow-auto so zoomed content is scrollable */}
+            {/* Image viewport */}
             <motion.div
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.92 }}
               transition={{ duration: 0.2 }}
-              className="relative z-10 overflow-auto rounded-2xl"
+              className="relative z-10 overflow-hidden rounded-2xl"
               style={{ width: "min(90vw, 820px)", height: "min(72vh, 620px)" }}
               onWheel={(e) => {
                 const delta = e.deltaY < 0 ? 0.1 : -0.1;
@@ -422,10 +422,8 @@ export function KycDocViewer({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  minWidth: "100%",
-                  minHeight: "100%",
-                  width: zoom > 1 ? `${zoom * 100}%` : "100%",
-                  height: zoom > 1 ? `${zoom * 100}%` : "100%",
+                  width: "100%",
+                  height: "100%",
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -435,12 +433,11 @@ export function KycDocViewer({
                   draggable={false}
                   className="select-none"
                   style={{
-                    width: zoom > 1 ? "100%" : "auto",
-                    height: zoom > 1 ? "auto" : "100%",
-                    maxWidth: zoom > 1 ? "none" : "100%",
-                    maxHeight: zoom > 1 ? "none" : "100%",
+                    maxWidth: "100%",
+                    maxHeight: "100%",
                     objectFit: "contain",
-                    transform: `rotate(${rotation}deg)`,
+                    transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                    transformOrigin: "center center",
                     transition: "transform 0.15s ease",
                   }}
                 />

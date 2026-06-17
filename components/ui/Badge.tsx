@@ -30,7 +30,7 @@ export function Badge({ children, variant = "neutral", className }: BadgeProps) 
 export function UserStatusBadge({ status }: { status: UserStatus }) {
   const map: Record<UserStatus, { label: string; variant: BadgeVariant }> = {
     ONBOARDING:       { label: "Onboarding",       variant: "info" },
-    PROFILE_COMPLETE: { label: "Profile Complete",  variant: "info" },
+    PROFILE_COMPLETE: { label: "Profile Complete",  variant: "purple" },
     KYC_PENDING:      { label: "KYC Pending",       variant: "warning" },
     ACTIVE:           { label: "Active",            variant: "success" },
     SUSPENDED:        { label: "Suspended",         variant: "warning" },

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, UserCheck, UserX, Clock } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
@@ -36,144 +36,200 @@ const SUB_TYPE_OPTIONS = [
   { label: "Vendor",        value: "VENDOR" },
 ];
 
-export default function PartnersPage() {
+const DATE_PRESET_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "week",  label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "year",  label: "This Year" },
+];
+
+function getDateRange(preset: string): { dateFrom?: string; dateTo?: string } {
+  if (!preset) return {};
+  const now = new Date();
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  if (preset === "today") return { dateFrom: start.toISOString() };
+  if (preset === "week")  { const d = new Date(start); d.setDate(d.getDate() - 7);        return { dateFrom: d.toISOString() }; }
+  if (preset === "month") { const d = new Date(start); d.setMonth(d.getMonth() - 1);      return { dateFrom: d.toISOString() }; }
+  if (preset === "year")  { const d = new Date(start); d.setFullYear(d.getFullYear() - 1); return { dateFrom: d.toISOString() }; }
+  return {};
+}
+
+function PartnersPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [subType, setSubType] = useState("");
-  const [city, setCity] = useState("");
+  // ── URL-driven filter state ──────────────────────────────────────────────
+  const page       = Number(searchParams.get("page")       ?? "1");
+  const search     = searchParams.get("search")     ?? "";
+  const status     = searchParams.get("status")     ?? "";
+  const subType    = searchParams.get("subType")    ?? "";
+  const city       = searchParams.get("city")       ?? "";
+  const datePreset = searchParams.get("datePreset") ?? "";
 
-  const [suspendTarget, setSuspendTarget] = useState<Partner | null>(null);
+  // Keep a ref so stable callbacks always read the latest params
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+
+  const updateParams = useCallback((updates: Record<string, string>) => {
+    const params = new URLSearchParams(searchParamsRef.current.toString());
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v) params.set(k, v);
+      else params.delete(k);
+    });
+    router.replace(`?${params.toString()}`);
+  }, [router]);
+
+  // ── Modal state (UI-only — not in URL) ───────────────────────────────────
+  const [suspendTarget,   setSuspendTarget]   = useState<Partner | null>(null);
   const [unsuspendTarget, setUnsuspendTarget] = useState<Partner | null>(null);
-  const [blockTarget, setBlockTarget] = useState<Partner | null>(null);
-  const [unblockTarget, setUnblockTarget] = useState<Partner | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Partner | null>(null);
+  const [blockTarget,     setBlockTarget]     = useState<Partner | null>(null);
+  const [unblockTarget,   setUnblockTarget]   = useState<Partner | null>(null);
+  const [deleteTarget,    setDeleteTarget]    = useState<Partner | null>(null);
 
+  // ── Data ─────────────────────────────────────────────────────────────────
   const { data: citiesData } = useQuery({
     queryKey: ["partner-cities"],
     queryFn: partnersApi.getCities,
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["partners", { page, search, status, subType, city }],
+    queryKey: ["partners", { page, search, status, subType, city, datePreset }],
     queryFn: () =>
       partnersApi.getAll({
         page,
         limit: 20,
-        ...(search && { search }),
-        ...(status && { status }),
-        ...(subType && { subType }),
-        ...(city && { city }),
+        ...(search    && { search }),
+        ...(status    && { status }),
+        ...(subType   && { subType }),
+        ...(city      && { city }),
+        ...getDateRange(datePreset),
       }),
   });
 
+  // Global stat counts — each fetches only 1 record to get pagination.total
+  const { data: activeStats }    = useQuery({
+    queryKey: ["partners-stat", "ACTIVE"],
+    queryFn: () => partnersApi.getAll({ page: 1, limit: 1, status: "ACTIVE" }),
+    staleTime: 60_000,
+  });
+  const { data: kycStats }       = useQuery({
+    queryKey: ["partners-stat", "KYC_PENDING"],
+    queryFn: () => partnersApi.getAll({ page: 1, limit: 1, status: "KYC_PENDING" }),
+    staleTime: 60_000,
+  });
+  const { data: suspendedStats } = useQuery({
+    queryKey: ["partners-stat", "SUSPENDED"],
+    queryFn: () => partnersApi.getAll({ page: 1, limit: 1, status: "SUSPENDED" }),
+    staleTime: 60_000,
+  });
+
   const cityOptions = (citiesData ?? []).map((c) => ({ label: c.city, value: c.city }));
+  const invalidate  = () => queryClient.invalidateQueries({ queryKey: ["partners"] });
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["partners"] });
-
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const suspendMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: { reason: string; isPermanent: boolean; endDate?: string } }) =>
       partnersApi.suspend(id, payload),
-    onSuccess: () => { toast.success("Partner suspended"); setSuspendTarget(null); invalidate(); },
-    onError: () => toast.error("Failed to suspend partner"),
+    onSuccess: () => { toast.success("Partner suspended");   setSuspendTarget(null);   invalidate(); },
+    onError:   () => toast.error("Failed to suspend partner"),
   });
 
   const unsuspendMutation = useMutation({
     mutationFn: (id: string) => partnersApi.unsuspend(id),
     onSuccess: () => { toast.success("Partner unsuspended"); setUnsuspendTarget(null); invalidate(); },
-    onError: () => toast.error("Failed to unsuspend partner"),
+    onError:   () => toast.error("Failed to unsuspend partner"),
   });
 
   const blockMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => partnersApi.block(id, reason),
-    onSuccess: () => { toast.success("Partner blocked"); setBlockTarget(null); invalidate(); },
-    onError: () => toast.error("Failed to block partner"),
+    onSuccess: () => { toast.success("Partner blocked");     setBlockTarget(null);     invalidate(); },
+    onError:   () => toast.error("Failed to block partner"),
   });
 
   const unblockMutation = useMutation({
     mutationFn: (id: string) => partnersApi.unblock(id),
-    onSuccess: () => { toast.success("Partner unblocked"); setUnblockTarget(null); invalidate(); },
-    onError: () => toast.error("Failed to unblock partner"),
+    onSuccess: () => { toast.success("Partner unblocked");   setUnblockTarget(null);   invalidate(); },
+    onError:   () => toast.error("Failed to unblock partner"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => partnersApi.deleteUser(id),
-    onSuccess: () => { toast.success("Partner deleted"); setDeleteTarget(null); invalidate(); },
-    onError: () => toast.error("Failed to delete partner"),
+    onSuccess: () => { toast.success("Partner deleted");     setDeleteTarget(null);    invalidate(); },
+    onError:   () => toast.error("Failed to delete partner"),
   });
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  // Guard: only update if value actually changed — prevents SearchInput's
+  // onChange from resetting page on mount when value matches URL already
   const handleSearch = useCallback((val: string) => {
-    setSearch(val);
-    setPage(1);
-  }, []);
+    if (val === (searchParamsRef.current.get("search") ?? "")) return;
+    updateParams({ search: val, page: "1" });
+  }, [updateParams]);
 
+  // ── Derived data ──────────────────────────────────────────────────────────
   const partners: Partner[] = data?.items ?? [];
   const pagination = data?.pagination;
 
-  const statsData = {
-    total: pagination?.total ?? 0,
-    active: partners.filter((p) => p.status === "ACTIVE").length,
-    pendingKyc: partners.filter((p) =>
-      ["KYC_PENDING", "KYC_IN_PROGRESS", "PROFILE_COMPLETE"].includes(p.status)
-    ).length,
-    suspended: partners.filter((p) => p.status === "SUSPENDED").length,
-  };
+  const activeCount     = activeStats?.pagination?.total    ?? 0;
+  const pendingKycCount = kycStats?.pagination?.total       ?? 0;
+  const suspendedCount  = suspendedStats?.pagination?.total ?? 0;
 
   return (
     <div className="space-y-6">
 
-      {/* Stat Cards */}
+      {/* ── Stat Cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Partners"
           value={(pagination?.total ?? 0).toLocaleString("en-IN")}
           icon={Users}
+          onClick={() => updateParams({ status: "", subType: "", city: "", datePreset: "", page: "1" })}
         />
         <StatCard
-          label="Active (on page)"
-          value={statsData.active}
+          label="Active"
+          value={activeCount}
           icon={UserCheck}
           iconColor="text-brand-green"
           iconBg="bg-green-50 dark:bg-green-950/30"
+          onClick={() => updateParams({ status: "ACTIVE", page: "1" })}
         />
         <StatCard
-          label="KYC Pending (on page)"
-          value={statsData.pendingKyc}
+          label="KYC Pending"
+          value={pendingKycCount}
           icon={Clock}
-          iconColor={statsData.pendingKyc > 5 ? "text-brand-orange" : "text-brand-purple"}
-          iconBg={statsData.pendingKyc > 5 ? "bg-orange-50 dark:bg-orange-950/30" : "bg-brand-purple-muted dark:bg-brand-purple-muted-dark"}
+          iconColor={pendingKycCount > 5 ? "text-brand-orange" : "text-brand-purple"}
+          iconBg={pendingKycCount > 5 ? "bg-orange-50 dark:bg-orange-950/30" : "bg-brand-purple-muted dark:bg-brand-purple-muted-dark"}
+          onClick={() => updateParams({ status: "KYC_PENDING", page: "1" })}
         />
         <StatCard
-          label="Suspended (on page)"
-          value={statsData.suspended}
+          label="Suspended"
+          value={suspendedCount}
           icon={UserX}
           iconColor="text-brand-red"
           iconBg="bg-red-50 dark:bg-red-950/30"
+          onClick={() => updateParams({ status: "SUSPENDED", page: "1" })}
         />
       </div>
 
-      {/* Filters */}
+      {/* ── Filters ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3">
         <SearchInput
           value={search}
           onChange={handleSearch}
-          placeholder="Search by name, mobile..."
+          placeholder="Search by name, mobile, aadhaar..."
           className="w-full sm:w-72"
         />
         <FilterSelect
           value={status}
-          onChange={(v) => { setStatus(v); setPage(1); }}
+          onChange={(v) => updateParams({ status: v, page: "1" })}
           options={STATUS_OPTIONS}
           placeholder="All Statuses"
           className="w-40"
         />
         <FilterSelect
           value={subType}
-          onChange={(v) => { setSubType(v); setPage(1); }}
+          onChange={(v) => updateParams({ subType: v, page: "1" })}
           options={SUB_TYPE_OPTIONS}
           placeholder="All Types"
           className="w-36"
@@ -181,15 +237,22 @@ export default function PartnersPage() {
         {cityOptions.length > 0 && (
           <FilterSelect
             value={city}
-            onChange={(v) => { setCity(v); setPage(1); }}
+            onChange={(v) => updateParams({ city: v, page: "1" })}
             options={cityOptions}
             placeholder="All Cities"
             className="w-36"
           />
         )}
+        <FilterSelect
+          value={datePreset}
+          onChange={(v) => updateParams({ datePreset: v, page: "1" })}
+          options={DATE_PRESET_OPTIONS}
+          placeholder="All Time"
+          className="w-36"
+        />
       </div>
 
-      {/* Table */}
+      {/* ── Table ────────────────────────────────────────────────────────── */}
       {isLoading ? (
         <TableSkeleton rows={8} cols={6} />
       ) : partners.length === 0 ? (
@@ -221,6 +284,7 @@ export default function PartnersPage() {
                     className="cursor-pointer"
                     onClick={() => router.push(`/partners/${partner.id}`)}
                   >
+                    {/* Partner */}
                     <td>
                       <div className="flex items-center gap-3">
                         <Avatar name={partner.name} size="sm" />
@@ -231,9 +295,16 @@ export default function PartnersPage() {
                           <p className="text-xs text-light-text-3 dark:text-dark-text-3">
                             {partner.partnerProfile?.email ?? partner.mobile}
                           </p>
+                          {partner.displayId && (
+                            <p className="text-[10px] text-light-text-3 dark:text-dark-text-3 font-mono">
+                              {partner.displayId}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
+
+                    {/* Type */}
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2">
                         {partner.partnerProfile?.subType === "VENDOR"
@@ -241,44 +312,40 @@ export default function PartnersPage() {
                           : "Vehicle Owner"}
                       </span>
                     </td>
+
+                    {/* City */}
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2">
                         {partner.partnerProfile?.city ?? "—"}
                       </span>
                     </td>
+
+                    {/* Status */}
                     <td>
                       <UserStatusBadge status={partner.status} />
                     </td>
+
+                    {/* Joined */}
                     <td>
                       <span className="text-sm text-light-text-2 dark:text-dark-text-2">
                         {formatDate(partner.createdAt)}
                       </span>
                     </td>
+
+                    {/* Actions */}
                     <td onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         {partner.status === "SUSPENDED" ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setUnsuspendTarget(partner)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => setUnsuspendTarget(partner)}>
                             Unsuspend
                           </Button>
                         ) : partner.status === "BLOCKED" ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setUnblockTarget(partner)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => setUnblockTarget(partner)}>
                             Unblock
                           </Button>
                         ) : (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSuspendTarget(partner)}
-                            >
+                            <Button variant="ghost" size="sm" onClick={() => setSuspendTarget(partner)}>
                               Suspend
                             </Button>
                             <Button
@@ -307,12 +374,15 @@ export default function PartnersPage() {
             </table>
           </div>
           {pagination && (
-            <Pagination pagination={pagination} onPageChange={setPage} />
+            <Pagination
+              pagination={pagination}
+              onPageChange={(n) => updateParams({ page: String(n) })}
+            />
           )}
         </div>
       )}
 
-      {/* Modals */}
+      {/* ── Modals ───────────────────────────────────────────────────────── */}
       <SuspendModal
         open={!!suspendTarget}
         onClose={() => setSuspendTarget(null)}
@@ -366,5 +436,12 @@ export default function PartnersPage() {
       />
     </div>
   );
+}
 
+export default function PartnersPage() {
+  return (
+    <Suspense fallback={null}>
+      <PartnersPageContent />
+    </Suspense>
+  );
 }

@@ -58,6 +58,7 @@ export interface KycRecord {
 
 export interface Partner {
   id: string;
+  displayId?: string;
   name: string;
   mobile: string;
   status: UserStatus;

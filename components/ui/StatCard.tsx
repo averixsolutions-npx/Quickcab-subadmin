@@ -10,6 +10,7 @@ interface StatCardProps {
   trend?: string;
   trendUp?: boolean;
   className?: string;
+  onClick?: () => void;
 }
 
 export function StatCard({
@@ -21,9 +22,17 @@ export function StatCard({
   trend,
   trendUp,
   className,
+  onClick,
 }: StatCardProps) {
   return (
-    <div className={cn("card flex items-start gap-4", className)}>
+    <div
+      className={cn(
+        "card flex items-start gap-4 transition-all duration-150",
+        onClick && "cursor-pointer hover:ring-2 hover:ring-brand-purple/30 hover:shadow-md",
+        className
+      )}
+      onClick={onClick}
+    >
       {Icon && (
         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", iconBg)}>
           <Icon size={18} className={iconColor} />
@@ -37,12 +46,12 @@ export function StatCard({
           {value}
         </p>
         {trend && (
-          <p
-            className={cn(
-              "text-xs mt-1",
-              trendUp ? "text-brand-green" : "text-brand-red"
-            )}
-          >
+          <p className={cn(
+            "text-xs mt-1",
+            trendUp === true  ? "text-brand-green" :
+            trendUp === false ? "text-brand-red" :
+            "text-light-text-3 dark:text-dark-text-3"
+          )}>
             {trend}
           </p>
         )}
