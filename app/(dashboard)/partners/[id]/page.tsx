@@ -228,7 +228,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
       freshKyc.selfieStatus === "REJECTED" ||
       (!!freshKyc.drivingLicenceUrl && freshKyc.drivingLicenceStatus === "REJECTED");
 
-    if (allApproved && !anyRejected) {
+    if (allApproved && !anyRejected && freshKyc.status !== "APPROVED") {
       await approveKycMutation.mutateAsync("All documents verified");
     }
   };
@@ -378,6 +378,8 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
                   onApprove={handleApproveKyc}
                   onReject={handleRejectKyc}
                   loading={approveKycMutation.isPending || rejectKycMutation.isPending}
+                  approving={approveKycMutation.isPending}
+                  rejecting={rejectKycMutation.isPending}
                 />
               </div>
 
@@ -408,6 +410,7 @@ export default function PartnerDetailPage({ params }: { params: Promise<{ id: st
                 onUploadDoc={handleUploadDoc}
                 uploadingField={uploadingField}
                 loading={reviewDocMutation.isPending}
+                processingField={reviewDocMutation.isPending ? reviewDocMutation.variables?.document ?? null : null}
               />
             </>
           ) : (
