@@ -5,6 +5,7 @@ import axios, {
   AxiosError,
 } from "axios";
 import toast from "react-hot-toast";
+import { useAuthStore } from "@/stores/authStore";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 
@@ -29,6 +30,14 @@ export const tokenStorage = {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
   },
+};
+
+const clearSession = () => {
+  tokenStorage.clear();
+  useAuthStore.getState().logout();
+  if (typeof window !== "undefined") {
+    document.cookie = "qc_subadmin_auth=; path=/; max-age=0";
+  }
 };
 
 const apiClient: AxiosInstance = axios.create({
@@ -82,7 +91,7 @@ apiClient.interceptors.response.use(
         const refreshToken = tokenStorage.getRefresh();
 
         if (!refreshToken) {
-          tokenStorage.clear();
+          clearSession();
           if (typeof window !== "undefined") window.location.href = "/login";
           return Promise.reject(error);
         }
@@ -117,7 +126,7 @@ apiClient.interceptors.response.use(
           return apiClient(originalRequest);
         } catch (refreshError) {
           processQueue(refreshError, null);
-          tokenStorage.clear();
+          clearSession();
           if (typeof window !== "undefined") window.location.href = "/login";
           return Promise.reject(refreshError);
         } finally {
@@ -125,7 +134,7 @@ apiClient.interceptors.response.use(
         }
       }
 
-      tokenStorage.clear();
+      clearSession();
       if (typeof window !== "undefined") window.location.href = "/login";
     }
 
