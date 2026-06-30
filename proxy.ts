@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/disabled", "/restricted"];
+const PUBLIC_ROUTES = ["/login"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

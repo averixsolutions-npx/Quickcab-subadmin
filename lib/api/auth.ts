@@ -1,17 +1,12 @@
-import apiClient, { tokenStorage } from "./client";
+import apiClient from "./client";
 
 export const authApi = {
-  login: async (username: string, password: string): Promise<{ token: string }> => {
-    const response = await apiClient.post("/subadmin/auth/login", { username, password });
-    const { token } = response.data.data;
-    tokenStorage.setToken(token);
-    return { token };
-  },
-
-  setName: async (name: string): Promise<{ token: string }> => {
-    const response = await apiClient.post("/subadmin/auth/set-name", { name });
-    const { token } = response.data.data;
-    tokenStorage.setToken(token);
-    return { token };
+  login: async (email: string, password: string) => {
+    const response = await apiClient.post("/admin/auth/login", { email, password });
+    return response.data.data as {
+      accessToken: string;
+      refreshToken: string;
+      admin: { id: string; name: string; email: string; role: string };
+    };
   },
 };

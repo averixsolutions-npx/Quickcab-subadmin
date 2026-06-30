@@ -29,7 +29,7 @@ interface DashboardStats {
 }
 
 async function fetchStats(): Promise<DashboardStats> {
-  const res = await apiClient.get("/subadmin/dashboard/stats");
+  const res = await apiClient.get("/admin/dashboard/stats");
   return res.data.data;
 }
 
@@ -41,7 +41,7 @@ function getGreeting() {
 }
 
 export default function DashboardPage() {
-  const { subAdminName } = useAuthStore();
+  const { admin } = useAuthStore();
 
   const { data: stats, isLoading, isError, refetch } = useQuery({
     queryKey: ["subadmin-dashboard-stats"],
@@ -58,7 +58,7 @@ export default function DashboardPage() {
             Dashboard
           </h1>
           <p className="text-sm text-light-text-2 dark:text-dark-text-2 mt-0.5">
-            {getGreeting()}{subAdminName ? `, ${subAdminName}` : ""} — here&apos;s what&apos;s happening
+            {getGreeting()}{admin?.name ? `, ${admin.name}` : ""} — here&apos;s what&apos;s happening
           </p>
         </div>
         <button

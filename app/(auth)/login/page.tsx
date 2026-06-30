@@ -8,19 +8,20 @@ import { z } from "zod";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, Shield } from "lucide-react";
 import { authApi } from "@/lib/api/auth";
+import { tokenStorage } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
 const loginSchema = z.object({
-  username: z.string().min(2, "Username is required"),
+  email: z.string().email("Enter a valid email"),
   password: z.string().min(4, "Password is required"),
 });
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setAuthenticated, isNameSet, isAuthenticated } = useAuthStore();
+  const { setAuthenticated, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -40,15 +41,16 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
     try {
-      const { token } = await authApi.login(data.username, data.password);
-      setAuthenticated(token);
-      document.cookie = "qc_subadmin_auth=1; path=/; max-age=43200";
+      const { accessToken, refreshToken, admin } = await authApi.login(data.email, data.password);
+      tokenStorage.setTokens(accessToken, refreshToken);
+      setAuthenticated(admin);
+      document.cookie = "qc_subadmin_auth=1; path=/; max-age=604800";
       toast.success("Login successful!");
-      router.push(isNameSet ? "/partners" : "/setup-name");
+      router.push("/partners");
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        "Invalid username or password";
+        "Invalid email or password";
       setError("root", { message: msg });
       toast.error(msg);
     } finally {
@@ -104,18 +106,18 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-light-text dark:text-dark-text mb-1.5">
-                Username
+                Email
               </label>
               <input
-                {...register("username")}
-                type="text"
-                autoComplete="username"
+                {...register("email")}
+                type="email"
+                autoComplete="email"
                 autoFocus
-                placeholder="subadmin"
-                className={cn("input-base", errors.username && "border-brand-red")}
+                placeholder="you@quickcab.com"
+                className={cn("input-base", errors.email && "border-brand-red")}
               />
-              {errors.username && (
-                <p className="text-xs text-brand-red mt-1">{errors.username.message}</p>
+              {errors.email && (
+                <p className="text-xs text-brand-red mt-1">{errors.email.message}</p>
               )}
             </div>
 

@@ -1,43 +1,39 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { tokenStorage } from "@/lib/api/client";
+
+interface AdminProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
 
 interface SubAdminState {
-  subAdminName: string | null;
+  admin: AdminProfile | null;
   isAuthenticated: boolean;
-  isNameSet: boolean;
-  setAuthenticated: (token: string) => void;
-  setName: (name: string) => void;
+  setAuthenticated: (admin: AdminProfile) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<SubAdminState>()(
   persist(
     (set) => ({
-      subAdminName: null,
+      admin: null,
       isAuthenticated: false,
-      isNameSet: false,
 
-      setAuthenticated: (token: string) => {
-        tokenStorage.setToken(token);
-        set({ isAuthenticated: true });
-      },
-
-      setName: (name: string) => {
-        set({ subAdminName: name, isNameSet: true });
+      setAuthenticated: (admin: AdminProfile) => {
+        set({ admin, isAuthenticated: true });
       },
 
       logout: () => {
-        tokenStorage.clear();
-        set({ subAdminName: null, isAuthenticated: false, isNameSet: false });
+        set({ admin: null, isAuthenticated: false });
       },
     }),
     {
       name: "qc_subadmin_auth",
       partialize: (state) => ({
-        subAdminName: state.subAdminName,
+        admin: state.admin,
         isAuthenticated: state.isAuthenticated,
-        isNameSet: state.isNameSet,
       }),
     }
   )

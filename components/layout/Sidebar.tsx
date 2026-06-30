@@ -18,7 +18,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { subAdminName, logout } = useAuthStore();
+  const { admin, logout } = useAuthStore();
 
   const handleLogout = () => {
     logout();
@@ -113,14 +113,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
           <div className="w-8 h-8 rounded-full bg-brand-purple flex items-center justify-center shrink-0">
             <span className="text-[11px] font-bold text-white">
-              {subAdminName ? getInitials(subAdminName) : "SA"}
+              {admin?.name ? getInitials(admin.name) : "SA"}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[13px] font-medium text-light-text dark:text-dark-text truncate">
-              {subAdminName ?? "SubAdmin"}
+              {admin?.name ?? "SubAdmin"}
             </p>
-            <p className="text-[11px] text-light-text-3 dark:text-dark-text-3 truncate">SubAdmin</p>
+            <p className="text-[11px] text-light-text-3 dark:text-dark-text-3 truncate">
+              {admin?.email ?? "SubAdmin"}
+            </p>
           </div>
           <button
             onClick={handleLogout}
