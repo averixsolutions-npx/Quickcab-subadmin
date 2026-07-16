@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { FileCheck, Clock, CheckCircle, XCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
@@ -41,12 +41,29 @@ function getDateRange(preset: string): { dateFrom?: string; dateTo?: string } {
   return {};
 }
 
-export default function KycPage() {
+function KycPageContent() {
   const router = useRouter();
-  const [page, setPage]             = useState(1);
-  const [search, setSearch]         = useState("");
-  const [kycStatus, setKycStatus]   = useState("PENDING");
-  const [datePreset, setDatePreset] = useState("");
+  const searchParams = useSearchParams();
+
+  // ── URL-driven filter state (survives back-navigation) ───────────────────
+  // kycStatus defaults to "PENDING" when the URL carries no status param,
+  // preserving the previous default view.
+  const page       = Number(searchParams.get("page") ?? "1");
+  const search     = searchParams.get("search") ?? "";
+  const kycStatus  = searchParams.get("status") ?? "PENDING";
+  const datePreset = searchParams.get("datePreset") ?? "";
+
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+
+  const updateParams = useCallback((updates: Record<string, string>) => {
+    const params = new URLSearchParams(searchParamsRef.current.toString());
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v) params.set(k, v);
+      else params.delete(k);
+    });
+    router.replace(`?${params.toString()}`);
+  }, [router]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["kyc-partners", { page, search, kycStatus, datePreset }],
@@ -61,9 +78,9 @@ export default function KycPage() {
   });
 
   const handleSearch = useCallback((val: string) => {
-    setSearch(val);
-    setPage(1);
-  }, []);
+    if (val === (searchParamsRef.current.get("search") ?? "")) return;
+    updateParams({ search: val, page: "1" });
+  }, [updateParams]);
 
   const partners: Partner[] = data?.items ?? [];
   const pagination = data?.pagination;
@@ -81,7 +98,7 @@ export default function KycPage() {
           label="Total Queue"
           value={(pagination?.total ?? 0).toLocaleString("en-IN")}
           icon={FileCheck}
-          onClick={() => { setKycStatus(""); setPage(1); }}
+          onClick={() => updateParams({ status: "", page: "1" })}
         />
         <StatCard
           label="Pending"
@@ -89,7 +106,7 @@ export default function KycPage() {
           icon={Clock}
           iconColor={pendingCount > 5 ? "text-brand-orange" : "text-brand-purple"}
           iconBg={pendingCount > 5 ? "bg-orange-50 dark:bg-orange-950/30" : "bg-brand-purple-muted dark:bg-brand-purple-muted-dark"}
-          onClick={() => { setKycStatus("PENDING"); setPage(1); }}
+          onClick={() => updateParams({ status: "PENDING", page: "1" })}
         />
         <StatCard
           label="Approved"
@@ -97,7 +114,7 @@ export default function KycPage() {
           icon={CheckCircle}
           iconColor="text-brand-green"
           iconBg="bg-green-50 dark:bg-green-950/30"
-          onClick={() => { setKycStatus("APPROVED"); setPage(1); }}
+          onClick={() => updateParams({ status: "APPROVED", page: "1" })}
         />
         <StatCard
           label="Rejected"
@@ -105,7 +122,7 @@ export default function KycPage() {
           icon={XCircle}
           iconColor="text-brand-red"
           iconBg="bg-red-50 dark:bg-red-950/30"
-          onClick={() => { setKycStatus("REJECTED"); setPage(1); }}
+          onClick={() => updateParams({ status: "REJECTED", page: "1" })}
         />
       </div>
 
@@ -119,14 +136,14 @@ export default function KycPage() {
         />
         <FilterSelect
           value={kycStatus}
-          onChange={(v) => { setKycStatus(v); setPage(1); }}
+          onChange={(v) => updateParams({ status: v, page: "1" })}
           options={KYC_STATUS_OPTIONS}
           placeholder="All KYC Statuses"
           className="w-44"
         />
         <FilterSelect
           value={datePreset}
-          onChange={(v) => { setDatePreset(v); setPage(1); }}
+          onChange={(v) => updateParams({ datePreset: v, page: "1" })}
           options={DATE_PRESET_OPTIONS}
           placeholder="All Time"
           className="w-36"
@@ -227,11 +244,19 @@ export default function KycPage() {
           {pagination && (
             <Pagination
               pagination={pagination}
-              onPageChange={setPage}
+              onPageChange={(n) => updateParams({ page: String(n) })}
             />
           )}
         </div>
       )}
     </div>
+  );
+}
+
+export default function KycPage() {
+  return (
+    <Suspense fallback={null}>
+      <KycPageContent />
+    </Suspense>
   );
 }

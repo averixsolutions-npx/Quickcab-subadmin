@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Clock, CheckCircle, XCircle } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
@@ -25,13 +25,29 @@ const STATUS_OPTIONS = [
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
-export default function BookingsPage() {
+function BookingsPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  // ── URL-driven filter state (survives back-navigation) ───────────────────
+  const page   = Number(searchParams.get("page") ?? "1");
+  const search = searchParams.get("search") ?? "";
+  const status = searchParams.get("status") ?? "";
+
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+
+  const updateParams = useCallback((updates: Record<string, string>) => {
+    const params = new URLSearchParams(searchParamsRef.current.toString());
+    Object.entries(updates).forEach(([k, v]) => {
+      if (v) params.set(k, v);
+      else params.delete(k);
+    });
+    router.replace(`?${params.toString()}`);
+  }, [router]);
+
+  // ── UI-only modal state (correctly local) ────────────────────────────────
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -56,9 +72,9 @@ export default function BookingsPage() {
   });
 
   const handleSearch = useCallback((val: string) => {
-    setSearch(val);
-    setPage(1);
-  }, []);
+    if (val === (searchParamsRef.current.get("search") ?? "")) return;
+    updateParams({ search: val, page: "1" });
+  }, [updateParams]);
 
   const bookings: Booking[] = data?.items ?? [];
   const pagination = data?.pagination;
@@ -115,7 +131,7 @@ export default function BookingsPage() {
         />
         <FilterSelect
           value={status}
-          onChange={(v) => { setStatus(v); setPage(1); }}
+          onChange={(v) => updateParams({ status: v, page: "1" })}
           options={STATUS_OPTIONS}
           placeholder="All Statuses"
           className="w-44"
@@ -193,7 +209,7 @@ export default function BookingsPage() {
               </tbody>
             </table>
           </div>
-          {pagination && <Pagination pagination={pagination} onPageChange={setPage} />}
+          {pagination && <Pagination pagination={pagination} onPageChange={(n) => updateParams({ page: String(n) })} />}
         </div>
       )}
 
@@ -207,5 +223,13 @@ export default function BookingsPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function BookingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <BookingsPageContent />
+    </Suspense>
   );
 }
